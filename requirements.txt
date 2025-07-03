@@ -1,0 +1,10 @@
+streamlit
+pandas
+openpyxl
+matplotlib
+Pillow
+streamlit-extras
+plotly
+streamlit-html-export
+reportlab
+pdfkit 
