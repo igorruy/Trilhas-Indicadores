@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Header } from "@/components/dashboard/Header";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { InfoCard } from "@/components/dashboard/InfoCard";
@@ -5,6 +6,7 @@ import { StatusTable } from "@/components/dashboard/StatusTable";
 import { ApprovalTable } from "@/components/dashboard/ApprovalTable";
 import { StepsTable } from "@/components/dashboard/StepsTable";
 import { BestPracticesFlow } from "@/components/dashboard/BestPracticesFlow";
+import { ExportButtons } from "@/components/dashboard/ExportButtons";
 
 const Index = () => {
   // Mock data based on the dashboard image
@@ -47,9 +49,11 @@ const Index = () => {
     { equipe: "Suprimentos - MM", trilhas: 241, passos: 3252 }
   ];
 
+  const dashboardRef = useRef<HTMLDivElement>(null);
+
   return (
     <div className="min-h-screen bg-[var(--gradient-dashboard)] p-6">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto" ref={dashboardRef}>
         <Header />
         
         {/* Main KPI Section */}
@@ -97,6 +101,9 @@ const Index = () => {
 
         {/* Best Practices Flow */}
         <BestPracticesFlow />
+
+        {/* Export Buttons */}
+        <ExportButtons dashboardRef={dashboardRef} />
 
         {/* Footer Info */}
         <div className="bg-white p-6 rounded-lg shadow-[var(--shadow-card)] mb-6">
