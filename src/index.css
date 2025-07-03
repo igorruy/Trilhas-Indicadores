@@ -8,6 +8,28 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
+    /* SIPAL Corporate Colors */
+    --sipal-blue: 206 100% 38%;
+    --sipal-blue-light: 206 100% 45%;
+    --sipal-yellow: 47 100% 50%;
+    --sipal-yellow-light: 47 100% 85%;
+    --sipal-green: 151 55% 41%;
+    --sipal-green-light: 151 55% 85%;
+    --sipal-red: 0 78% 63%;
+    --sipal-red-light: 0 78% 85%;
+    --sipal-gray: 210 16% 93%;
+    --sipal-gray-dark: 215 16% 47%;
+    
+    /* Gradients */
+    --gradient-blue: linear-gradient(135deg, hsl(var(--sipal-blue)), hsl(var(--sipal-blue-light)));
+    --gradient-dashboard: linear-gradient(135deg, hsl(var(--sipal-gray)) 0%, hsl(0 0% 98%) 100%);
+    
+    /* Shadows */
+    --shadow-card: 0 4px 12px hsl(var(--sipal-blue) / 0.1);
+    --shadow-card-hover: 0 8px 25px hsl(var(--sipal-blue) / 0.15);
+    --shadow-header: 0 2px 8px hsl(var(--sipal-blue) / 0.08);
+    
+    /* Standard theme colors */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
 

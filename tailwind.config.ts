@@ -24,6 +24,16 @@ export default {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				'sipal-blue': 'hsl(var(--sipal-blue))',
+				'sipal-blue-light': 'hsl(var(--sipal-blue-light))',
+				'sipal-yellow': 'hsl(var(--sipal-yellow))',
+				'sipal-yellow-light': 'hsl(var(--sipal-yellow-light))',
+				'sipal-green': 'hsl(var(--sipal-green))',
+				'sipal-green-light': 'hsl(var(--sipal-green-light))',
+				'sipal-red': 'hsl(var(--sipal-red))',
+				'sipal-red-light': 'hsl(var(--sipal-red-light))',
+				'sipal-gray': 'hsl(var(--sipal-gray))',
+				'sipal-gray-dark': 'hsl(var(--sipal-gray-dark))',
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
 					foreground: 'hsl(var(--primary-foreground))'
