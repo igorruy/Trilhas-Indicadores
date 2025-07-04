@@ -15,6 +15,17 @@ from datetime import datetime
 import email
 from email.message import EmailMessage
 import base64
+import imgkit
+from html2image import Html2Image
+import traceback
+from PIL import Image, ImageChops
+from io import BytesIO
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+import time
+import asyncio
+from pyppeteer import launch
 
 st.set_page_config(page_title='Status da Construção das Trilhas', layout='wide')
 
@@ -25,6 +36,52 @@ with col_upload1:
     uploaded_file = st.file_uploader('Selecione o arquivo Excel com as trilhas:', type=['xlsx'], key='uploader1')
 with col_upload2:
     uploaded_file_itens = st.file_uploader('Selecione o arquivo Excel com os passos (aba Items):', type=['xlsx'], key='uploader2')
+
+# Após os imports, adicione:
+table_style = (
+    'style="border-collapse:separate;border-spacing:0;width:100%;font-size:1rem;background:#fff;"'
+)
+th_style = (
+    'style="background:#0074C1;color:#fff;padding:10px 6px;text-align:center;border-bottom:2px solid #e0e0e0;font-weight:600;"'
+)
+td_style = (
+    'style="padding:10px 6px;text-align:center;border-bottom:1px solid #f0f0f0;"'
+)
+def zebra_table(html):
+    # Ajustar para que o nome do índice fique na linha do cabeçalho
+    if '<th></th>' in html and 'class="dataframe"' in html:
+        idx_name = ''
+        try:
+            idx_name = html.split('<th></th>')[1].split('</tr>')[0].split('>')[1].split('<')[0]
+        except:
+            idx_name = ''
+        if idx_name:
+            html = html.replace('<th></th>', f'<th>{idx_name}</th>', 1)
+    linhas = html.split('<tr>')
+    if len(linhas) > 2 and ('Frente' in linhas[1] or 'Aprovador Responsável' in linhas[1]):
+        linhas = [linhas[0]] + linhas[2:]
+    resultado = [linhas[0]]
+    for i, linha in enumerate(linhas[1:]):
+        # Adiciona classe 'total-row' à última linha
+        if i == len(linhas[1:]) - 1:
+            resultado.append(f'<tr class="total-row">{linha}')
+        else:
+            resultado.append(f'<tr>{linha}')
+    html = ''.join(resultado)
+    html = html.replace('<table border="0" class="styled-table"', '<table')
+    html = html.replace('<table ', '<table class="styled-table" ')
+    return html
+
+# Garantir que as variáveis existem, mesmo se não houver upload
+resumo_frente_html = ''
+resumo_aprovador_html = ''
+status_aprov_html = ''
+indicadores_gerais_html = ''
+passos_equipes_html = ''
+grafico_trilhas_base64 = ''
+grafico_aprovador_base64 = ''
+grafico_passos_equipes_base64 = ''
+data_atual = ''
 
 if uploaded_file and uploaded_file_itens:
     df = pd.read_excel(uploaded_file, sheet_name='Trilhas Detalhadas')
@@ -83,6 +140,55 @@ if uploaded_file and uploaded_file_itens:
     if col_ciclo and isinstance(col_ciclo, str) and col_ciclo in df_filtrado.columns and ciclo:
         df_filtrado = df_filtrado[df_filtrado[col_ciclo] == ciclo]
 
+    # ... cálculo das variáveis ...
+    # Calcule dias restantes para o prazo de entrega
+    data_final = datetime(2025, 7, 18)
+    dias_restantes = (data_final - datetime.now()).days
+    # Corrigir o valor de 'Em andamento'
+    if isinstance(df_filtrado, pd.DataFrame):
+        total_trilhas = int(df_filtrado[col_trilha].nunique()) if col_trilha and col_trilha in df_filtrado.columns else 0
+        aprovadas = int(df_filtrado[df_filtrado[col_status_aprov] == 'Aprovado'][col_trilha].nunique()) if col_trilha and col_status_aprov and col_trilha in df_filtrado.columns and col_status_aprov in df_filtrado.columns else 0
+    else:
+        total_trilhas = 0
+        aprovadas = 0
+    em_andamento = total_trilhas - aprovadas
+    # Definir valores padrão para indicadores do ciclo anterior
+    diff = 0
+    perc = 0
+    diff_var = 0
+    perc_var = 0
+    ciclo_anterior = ''
+    total_aprovadas = 0
+    total_aprovadas_var_dim = 0
+    if ciclo:
+        if col_ciclo and col_status_aprov and col_total_var_dim and col_trilha and col_ciclo in df.columns and col_status_aprov in df.columns and col_total_var_dim in df.columns:
+            df_ciclo = df[(df[col_ciclo] == ciclo) & (df[col_status_aprov] == 'Aprovado')]
+            total_aprovadas = df_ciclo[col_trilha].nunique()
+            total_aprovadas_var_dim = int(df_ciclo[col_total_var_dim].sum())
+            idx_ciclo = ciclo_options.index(ciclo)
+            if idx_ciclo > 0:
+                ciclo_anterior = ciclo_options[idx_ciclo - 1]
+                df_ciclo_ant = df[(df[col_ciclo] == ciclo_anterior) & (df[col_status_aprov] == 'Aprovado')]
+                total_aprovadas_ant = df_ciclo_ant[col_trilha].nunique()
+                total_aprovadas_var_dim_ant = int(df_ciclo_ant[col_total_var_dim].sum())
+                diff = total_aprovadas - total_aprovadas_ant
+                perc = (diff / total_aprovadas_ant * 100) if total_aprovadas_ant else 0
+                diff_var = total_aprovadas_var_dim - total_aprovadas_var_dim_ant
+                perc_var = (diff_var / total_aprovadas_var_dim_ant * 100) if total_aprovadas_var_dim_ant else 0
+    # --- CARDS/KPIs NO TOPO (VISUAL STREAMLIT) ---
+    st.markdown('---')
+    st.subheader('Indicadores Gerais')
+    col_kpi1, col_kpi2, col_kpi3, col_kpi4, col_kpi5 = st.columns(5)
+    col_kpi1.metric('Total de Trilhas', total_trilhas)
+    col_kpi2.metric('Aprovadas', aprovadas)
+    col_kpi3.metric('Em andamento', em_andamento)
+    if isinstance(df_filtrado, pd.DataFrame) and col_status_aprov and col_status_aprov in df_filtrado.columns:
+        percentual_aprov_geral = (df_filtrado[col_status_aprov] == 'Aprovado').sum() / len(df_filtrado) * 100 if len(df_filtrado) > 0 else 0
+    else:
+        percentual_aprov_geral = 0
+    col_kpi4.metric('% Aprovação Geral', f'{percentual_aprov_geral:.1f}%')
+    col_kpi5.metric('Restam dias para o prazo', dias_restantes, help='Prazo final: 18/07/2025')
+
     # --- CARDS/KPIs NO TOPO ---
     if ciclo:
         st.markdown('---')
@@ -104,6 +210,9 @@ if uploaded_file and uploaded_file_itens:
                 diff_var = total_aprovadas_var_dim - total_aprovadas_var_dim_ant
                 perc_var = (diff_var / total_aprovadas_var_dim_ant * 100) if total_aprovadas_var_dim_ant else 0
                 col_kpi1, col_kpi2 = st.columns(2)
+                # Cálculo das diferenças
+                diff_color = '#488432' if diff >= 0 else '#c10000'
+                diff_var_color = '#488432' if diff_var >= 0 else '#c10000'
                 col_kpi1.metric(f'Trilhas Aprovadas - {ciclo}', total_aprovadas, f"{diff} ({perc:.1f}%) vs {ciclo_anterior}")
                 col_kpi2.metric(f'Trilhas Aprovadas c/ Variações e Dimensões - {ciclo}', total_aprovadas_var_dim, f"{diff_var} ({perc_var:.1f}%) vs {ciclo_anterior}")
             else:
@@ -130,37 +239,67 @@ if uploaded_file and uploaded_file_itens:
         total = df_filtrado.groupby(col_frente)[col_trilha].count()
         resumo_frente = pd.DataFrame({
             'Aprovados': aprovados,
-            'Outros Status': outros,
+            'Em andamento': outros,
             'Total': total
         }).fillna(0).astype(int)
         resumo_frente['% Aprovado'] = 100 * resumo_frente['Aprovados'] / resumo_frente['Total']
-        resumo_frente['% Outros Status'] = 100 * resumo_frente['Outros Status'] / resumo_frente['Total']
-        resumo_frente = resumo_frente[['Aprovados', 'Outros Status', 'Total', '% Aprovado', '% Outros Status']]
+        resumo_frente['% Em andamento'] = 100 * resumo_frente['Em andamento'] / resumo_frente['Total']
+        # Formatar porcentagens para uma casa decimal
+        resumo_frente['% Aprovado'] = resumo_frente['% Aprovado'].map(lambda x: f"{x:.1f}")
+        resumo_frente['% Em andamento'] = resumo_frente['% Em andamento'].map(lambda x: f"{x:.1f}")
+        resumo_frente = resumo_frente[['Aprovados', 'Em andamento', 'Total', '% Aprovado', '% Em andamento']]
         st.dataframe(resumo_frente)
-        # Gráfico de barras agrupadas para %
+        # Gráfico de barras empilhadas para %
+        COLOR_VERDE = '#22B573'
+        COLOR_AMARELO = '#FFD600'
+        resumo_frente_plot = resumo_frente.copy()
+        resumo_frente_plot['% Aprovado'] = resumo_frente_plot['% Aprovado'].astype(float)
+        resumo_frente_plot['% Em andamento'] = resumo_frente_plot['% Em andamento'].astype(float)
         fig, ax = plt.subplots(figsize=(10, 5))
-        x = np.arange(len(resumo_frente.index))
-        width = 0.35
-        ax.bar(x - width/2, resumo_frente['% Aprovado'], width, label='% Aprovado', color='green')
-        ax.bar(x + width/2, resumo_frente['% Outros Status'], width, label='% Outros Status', color='orange')
+        x = np.arange(len(resumo_frente_plot.index))
+        # Barras empilhadas
+        bars1 = ax.bar(x, resumo_frente_plot['% Aprovado'], label='% Aprovado', color=COLOR_VERDE)
+        bars2 = ax.bar(x, resumo_frente_plot['% Em andamento'], bottom=resumo_frente_plot['% Aprovado'], label='% Em andamento', color=COLOR_AMARELO)
         ax.set_xticks(x)
-        ax.set_xticklabels(resumo_frente.index, rotation=45, ha='right')
-        ax.set_ylabel('%')
-        ax.set_title('Percentual de Status por Frente')
-        ax.legend()
+        ax.set_xticklabels(resumo_frente_plot.index, rotation=45, ha='right', fontsize=12)
+        ax.set_ylabel('%', fontsize=13)
+        ax.set_ylim(0, 100)
+        ax.set_title('Percentual de Status por Frente', fontsize=15)
+        ax.legend(fontsize=12)
+        ax.grid(axis='y', linestyle='--', alpha=0.4)
+        # Exibir valores nas barras empilhadas
+        for i, (aprov, andamento) in enumerate(zip(resumo_frente_plot['% Aprovado'], resumo_frente_plot['% Em andamento'])):
+            ax.annotate(f'{aprov:.1f}%',
+                        xy=(i, aprov/2),
+                        xytext=(0, 0),
+                        textcoords="offset points",
+                        ha='center', va='center', fontsize=11, color='black')
+            ax.annotate(f'{andamento:.1f}%',
+                        xy=(i, aprov + andamento/2),
+                        xytext=(0, 0),
+                        textcoords="offset points",
+                        ha='center', va='center', fontsize=11, color='black')
+        plt.tight_layout()
         st.pyplot(fig)
+        # Após calcular resumo_frente, adicione linha de totais como última linha
+        if not resumo_frente.empty:
+            total_row = {
+                'Aprovados': resumo_frente['Aprovados'].sum(),
+                'Em andamento': resumo_frente['Em andamento'].sum(),
+                'Total': resumo_frente['Total'].sum(),
+                '% Aprovado': f"{resumo_frente['% Aprovado'].astype(float).mean():.1f}",
+                '% Em andamento': f"{resumo_frente['% Em andamento'].astype(float).mean():.1f}"
+            }
+            resumo_frente.loc['Total'] = total_row
+            resumo_frente = resumo_frente.reset_index()
+            # Move 'Total' para última linha
+            if 'index' in resumo_frente.columns:
+                total_row_df = resumo_frente[resumo_frente['index'] == 'Total']
+                resumo_frente = pd.concat([resumo_frente[resumo_frente['index'] != 'Total'], total_row_df], ignore_index=True)
+                resumo_frente = resumo_frente.rename(columns={'index': ''})
+        resumo_frente_html = zebra_table(resumo_frente.to_html(index=False, border=0, classes='styled-table')) if 'resumo_frente' in locals() else ''
     else:
         st.warning('Colunas de Frente ou Status não encontradas para resumo.')
-
-    # --- INDICADORES DE TOTAL DE TRILHAS E PASSOS ---
-    st.subheader('Indicadores Gerais')
-    colA, colB = st.columns(2)
-    with colA:
-        if col_trilha and col_trilha in df_filtrado.columns:
-            st.metric('Total de Trilhas', int(df_filtrado[col_trilha].nunique()))
-    with colB:
-        if 'Total de Passos' in df_filtrado.columns:
-            st.metric('Total de Passos', int(df_filtrado['Total de Passos'].sum()))
 
     # --- TABELA RESUMO POR APROVADOR RESPONSÁVEL ---
     st.subheader('Resumo por Aprovador Responsável')
@@ -170,25 +309,63 @@ if uploaded_file and uploaded_file_itens:
         total_aprov = df_filtrado.groupby(col_dono)[col_trilha].count()
         resumo_aprovador = pd.DataFrame({
             'Aprovados': aprovados_aprov,
-            'Outros Status': outros_aprov,
+            'Em andamento': outros_aprov,
             'Total': total_aprov
         }).fillna(0).astype(int)
         resumo_aprovador['% Aprovado'] = 100 * resumo_aprovador['Aprovados'] / resumo_aprovador['Total']
-        resumo_aprovador['% Outros Status'] = 100 * resumo_aprovador['Outros Status'] / resumo_aprovador['Total']
-        resumo_aprovador = resumo_aprovador[['Aprovados', 'Outros Status', 'Total', '% Aprovado', '% Outros Status']]
+        resumo_aprovador['% Em andamento'] = 100 * resumo_aprovador['Em andamento'] / resumo_aprovador['Total']
+        # Formatar porcentagens para uma casa decimal
+        resumo_aprovador['% Aprovado'] = resumo_aprovador['% Aprovado'].map(lambda x: f"{x:.1f}")
+        resumo_aprovador['% Em andamento'] = resumo_aprovador['% Em andamento'].map(lambda x: f"{x:.1f}")
+        resumo_aprovador = resumo_aprovador[['Aprovados', 'Em andamento', 'Total', '% Aprovado', '% Em andamento']]
         st.dataframe(resumo_aprovador)
-        # Gráfico de barras agrupadas para %
+        # Gráfico de barras empilhadas para %
+        resumo_aprovador_plot = resumo_aprovador.copy()
+        resumo_aprovador_plot['% Aprovado'] = resumo_aprovador_plot['% Aprovado'].astype(float)
+        resumo_aprovador_plot['% Em andamento'] = resumo_aprovador_plot['% Em andamento'].astype(float)
         fig4, ax4 = plt.subplots(figsize=(10, 5))
-        x = np.arange(len(resumo_aprovador.index))
-        width = 0.35
-        ax4.bar(x - width/2, resumo_aprovador['% Aprovado'], width, label='% Aprovado', color='green')
-        ax4.bar(x + width/2, resumo_aprovador['% Outros Status'], width, label='% Outros Status', color='orange')
+        x = np.arange(len(resumo_aprovador_plot.index))
+        # Barras empilhadas
+        bars1 = ax4.bar(x, resumo_aprovador_plot['% Aprovado'], label='% Aprovado', color=COLOR_VERDE)
+        bars2 = ax4.bar(x, resumo_aprovador_plot['% Em andamento'], bottom=resumo_aprovador_plot['% Aprovado'], label='% Em andamento', color=COLOR_AMARELO)
         ax4.set_xticks(x)
-        ax4.set_xticklabels(resumo_aprovador.index, rotation=45, ha='right')
-        ax4.set_ylabel('%')
-        ax4.set_title('Percentual de Status por Aprovador Responsável')
-        ax4.legend()
+        ax4.set_xticklabels(resumo_aprovador_plot.index, rotation=45, ha='right', fontsize=12)
+        ax4.set_ylabel('%', fontsize=13)
+        ax4.set_ylim(0, 100)
+        ax4.set_title('Percentual de Status por Aprovador Responsável', fontsize=15)
+        ax4.legend(fontsize=12)
+        ax4.grid(axis='y', linestyle='--', alpha=0.4)
+        # Exibir valores nas barras empilhadas
+        for i, (aprov, andamento) in enumerate(zip(resumo_aprovador_plot['% Aprovado'], resumo_aprovador_plot['% Em andamento'])):
+            ax4.annotate(f'{aprov:.1f}%',
+                        xy=(i, aprov/2),
+                        xytext=(0, 0),
+                        textcoords="offset points",
+                        ha='center', va='center', fontsize=11, color='black')
+            ax4.annotate(f'{andamento:.1f}%',
+                        xy=(i, aprov + andamento/2),
+                        xytext=(0, 0),
+                        textcoords="offset points",
+                        ha='center', va='center', fontsize=11, color='black')
+        plt.tight_layout()
         st.pyplot(fig4)
+        # Após calcular resumo_aprovador, adicione linha de totais como última linha
+        if not resumo_aprovador.empty:
+            total_row = {
+                'Aprovados': resumo_aprovador['Aprovados'].sum(),
+                'Em andamento': resumo_aprovador['Em andamento'].sum(),
+                'Total': resumo_aprovador['Total'].sum(),
+                '% Aprovado': f"{resumo_aprovador['% Aprovado'].astype(float).mean():.1f}",
+                '% Em andamento': f"{resumo_aprovador['% Em andamento'].astype(float).mean():.1f}"
+            }
+            resumo_aprovador.loc['Total'] = total_row
+            resumo_aprovador = resumo_aprovador.reset_index()
+            # Move 'Total' para última linha
+            if 'index' in resumo_aprovador.columns:
+                total_row_df = resumo_aprovador[resumo_aprovador['index'] == 'Total']
+                resumo_aprovador = pd.concat([resumo_aprovador[resumo_aprovador['index'] != 'Total'], total_row_df], ignore_index=True)
+                resumo_aprovador = resumo_aprovador.rename(columns={'index': ''})
+        resumo_aprovador_html = zebra_table(resumo_aprovador.to_html(index=False, border=0, classes='styled-table')) if 'resumo_aprovador' in locals() else ''
     else:
         st.warning('Colunas de Aprovador ou Status não encontradas para resumo.')
 
@@ -212,32 +389,49 @@ if uploaded_file and uploaded_file_itens:
     passos_equipes = pd.merge(passos_aprovados, passos_outros, on='Team', how='outer').fillna(0)
     passos_equipes['Passos Aprovados'] = passos_equipes['Passos Aprovados'].astype(int)
     passos_equipes['Passos Outros Status'] = passos_equipes['Passos Outros Status'].astype(int)
+    # Renomear a coluna do DataFrame inteiro de "Passos Outros Status" para "Passos Em andamento"
+    passos_equipes = passos_equipes.rename(columns={'Passos Outros Status': 'Passos Em andamento'})
+    # Adicione linha de totais como última linha em Passos por Equipe
+    if not passos_equipes.empty:
+        total_row = {
+            'Team': 'Total',
+            'Passos Aprovados': passos_equipes['Passos Aprovados'].sum(),
+            'Passos Em andamento': passos_equipes['Passos Em andamento'].sum()
+        }
+        passos_equipes = pd.concat([passos_equipes[passos_equipes['Team'] != 'Total'], pd.DataFrame([total_row])], ignore_index=True)
     st.dataframe(passos_equipes)
     # Gráfico de barras agrupadas
     fig3, ax3 = plt.subplots(figsize=(10, 5))
     x = np.arange(len(passos_equipes['Team']))
     width = 0.35
-    ax3.bar(x - width/2, passos_equipes['Passos Aprovados'], width, label='Passos Aprovados', color='green')
-    ax3.bar(x + width/2, passos_equipes['Passos Outros Status'], width, label='Passos Outros Status', color='orange')
+    bars1 = ax3.bar(x - width/2, passos_equipes['Passos Aprovados'], width, label='Passos Aprovados', color='green')
+    bars2 = ax3.bar(x + width/2, passos_equipes['Passos Em andamento'], width, label='Passos Em andamento', color='orange')
     ax3.set_xticks(x)
-    ax3.set_xticklabels(passos_equipes['Team'], rotation=45, ha='right')
+    ax3.set_xticklabels(passos_equipes['Team'], rotation=45, ha='right', fontsize=11)
     ax3.set_ylabel('Quantidade de Passos')
     ax3.set_title('Quantidade de Passos por Equipe')
     ax3.legend()
+    plt.subplots_adjust(bottom=0.22)
+    # Adicionar totalizadores acima das barras (padrão: fonte preta, normal)
+    for bar in bars1:
+        height = bar.get_height()
+        ax3.annotate(f'{int(height)}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom', fontsize=11, color='black')
+    for bar in bars2:
+        height = bar.get_height()
+        ax3.annotate(f'{int(height)}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom', fontsize=11, color='black')
     st.pyplot(fig3)
 
     # --- Ajustar cores dos gráficos ---
     COLOR_AZUL = '#0074C1'
-    COLOR_AMARELO = '#FFD600'
     COLOR_VERMELHO = '#C10000'
-    COLOR_VERDE = '#22B573'
-
-    # Exemplo de uso das cores em gráficos matplotlib:
-    # ax.bar(..., color=COLOR_AZUL)
-    # Para gráficos de status, use as cores conforme o status
-    # Exemplo para gráfico de barras agrupadas:
-    # ax.bar(x - width/2, resumo_frente['% Aprovado'], width, label='% Aprovado', color=COLOR_VERDE)
-    # ax.bar(x + width/2, resumo_frente['% Outros Status'], width, label='% Outros Status', color=COLOR_VERMELHO)
 
     # --- Botões de download ---
     st.markdown('---')
@@ -245,186 +439,170 @@ if uploaded_file and uploaded_file_itens:
 
     # Salvar gráficos principais como imagem para embutir no HTML
     fig.savefig('grafico_trilhas.png')
-    grafico_trilhas_base64 = ''
     with open('grafico_trilhas.png', 'rb') as img_file:
         grafico_trilhas_base64 = base64.b64encode(img_file.read()).decode('utf-8')
-
-    # Exportar como HTML estilizado com todos os indicadores
-    if st.button('Exportar como HTML (Completo)'):
-        data_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
-        # Estilo inline para tabelas
-        table_style = (
-            'style="border-collapse:separate;border-spacing:0;width:100%;font-size:1rem;background:#fff;"'
-        )
-        th_style = (
-            'style="background:#0074C1;color:#fff;padding:10px 6px;text-align:center;border-bottom:2px solid #e0e0e0;font-weight:600;"'
-        )
-        td_style = (
-            'style="padding:10px 6px;text-align:center;border-bottom:1px solid #f0f0f0;"'
-        )
-        def zebra_table(html):
-            linhas = html.split('<tr>')
-            resultado = [linhas[0]]  # Cabeçalho antes do primeiro <tr>
-            for i, linha in enumerate(linhas[1:]):
-                cor = '#f9fbfd' if i % 2 == 0 else '#fff'
-                resultado.append(f'<tr style="background:{cor};">{linha}')
-            html = ''.join(resultado)
-            html = html.replace('<table border="0" class="styled-table"', f'<table {table_style}') \
-                       .replace('<th>', f'<th {th_style}>') \
-                       .replace('<td>', f'<td {td_style}>')
-            return html
-        # Gera as tabelas com classe para aplicar o estilo
-        resumo_frente_html = zebra_table(resumo_frente.to_html(index=True, border=0, classes='styled-table')) if 'resumo_frente' in locals() else ''
-        resumo_aprovador_html = zebra_table(resumo_aprovador.to_html(index=True, border=0, classes='styled-table')) if 'resumo_aprovador' in locals() else ''
-        passos_equipes_html = zebra_table(passos_equipes.to_html(index=True, border=0, classes='styled-table')) if 'passos_equipes' in locals() else ''
-        html_content = f'''
-        <!DOCTYPE html>
-        <html lang="pt-br">
-        <head>
-            <meta charset="utf-8">
-            <title>Status da Construção das Trilhas</title>
-        </head>
-        <body style="font-family: Arial, Verdana, sans-serif; background: #f4f8fb; margin: 0; padding: 0;">
-            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #f4f8fb;">
-              <tr>
-                <td align="center">
-                  <table width="700" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 18px; box-shadow: 0 2px 8px #0001; margin: 24px 0;">
-                    <tr>
-                      <td style="padding: 24px 24px 0 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                          <tr>
-                            <td style="width: 80px; height: 80px; background: #eee; border-radius: 12px; text-align: center; font-weight: bold; color: #888; font-size: 1.5rem; vertical-align: middle;">LOGO</td>
-                            <td style="padding-left: 32px; vertical-align: middle;"><span style="font-size: 2.2rem; font-weight: bold; color: #0074C1;">STATUS DA CONSTRUÇÃO DAS TRILHAS</span></td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 0 24px 0 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 24px 0 16px 0;">
-                          <tr>
-                            <td style="background: linear-gradient(135deg, #22B573 0%, #0074C1 100%); border-radius: 14px; padding: 24px 36px; color: #fff; text-align: center; font-size: 1.1rem; font-weight: bold; min-width: 220px;">
-                              Trilhas Aprovadas - {ciclo}<br>
-                              <span style="font-size: 2.2rem;">{total_aprovadas}</span><br>
-                              <span style="font-size: 1rem; color: #FFD600;">{diff if 'diff' in locals() else ''}</span>
-                            </td>
-                            <td width="24"></td>
-                            <td style="background: linear-gradient(135deg, #22B573 0%, #0074C1 100%); border-radius: 14px; padding: 24px 36px; color: #fff; text-align: center; font-size: 1.1rem; font-weight: bold; min-width: 220px;">
-                              Trilhas Aprovadas c/ Variações e Dimensões - {ciclo}<br>
-                              <span style="font-size: 2.2rem;">{total_aprovadas_var_dim}</span><br>
-                              <span style="font-size: 1rem; color: #FFD600;">{diff_var if 'diff_var' in locals() else ''}</span>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 0 24px 0 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; margin-bottom: 24px;">
-                          <tr><td style="padding: 24px 0 0 0;"><h2 style="color: #0074C1; margin: 0 0 12px 0;">Status da Construção das Trilhas</h2></td></tr>
-                          <tr><td>{resumo_frente_html}</td></tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 0 24px 0 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; margin-bottom: 24px;">
-                          <tr><td style="padding: 24px 0 0 0;"><h2 style="color: #0074C1; margin: 0 0 12px 0;">Resumo por Aprovador Responsável</h2></td></tr>
-                          <tr><td>{resumo_aprovador_html}</td></tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 0 24px 0 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; margin-bottom: 24px;">
-                          <tr><td style="padding: 24px 0 0 0;"><h2 style="color: #0074C1; margin: 0 0 12px 0;">Gráfico de Status das Trilhas</h2></td></tr>
-                          <tr><td><img src="data:image/png;base64,{grafico_trilhas_base64}" style="width: 100%; max-width: 600px; border-radius: 10px; display: block; margin: 0 auto 18px auto; box-shadow: 0 2px 8px #0001;" /></td></tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 0 24px 0 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; margin-bottom: 24px;">
-                          <tr><td style="padding: 24px 0 0 0;"><h2 style="color: #0074C1; margin: 0 0 12px 0;">Passos por Equipe</h2></td></tr>
-                          <tr><td>{passos_equipes_html}</td></tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 0 24px 0 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                          <tr><td style="background: #FFD600; color: #222; border-radius: 8px; padding: 14px 20px; font-weight: bold; font-size: 1.1rem;">INFORMATIVO: Espaço para mensagem customizada do projeto.</td></tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 0 24px 0 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                          <tr><td style="padding: 18px 0 0 0; font-size: 1rem;">
-                            <b>Como enviar por e-mail:</b><br>
-                            1. Baixe este arquivo HTML.<br>
-                            2. Abra o arquivo no navegador.<br>
-                            3. Selecione todo o conteúdo (Ctrl+A), copie (Ctrl+C) e cole (Ctrl+V) no corpo do e-mail no Outlook.<br>
-                            <br>
-                            <a href="mailto:?subject=Status das Trilhas&body=Veja o relatório em anexo ou cole o HTML no corpo do e-mail." style="color: #0074C1;">Clique aqui para abrir o Outlook</a>
-                          </td></tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="text-align: center; color: #888; font-size: 0.95rem; padding: 32px 0 12px 0;">
-                        Relatório gerado automaticamente em {data_atual}.
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-        </body>
-        </html>
-        '''
-        with open('relatorio_trilhas.html', 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        with open('relatorio_trilhas.html', 'rb') as f:
-            col_html, col_eml = st.columns(2)
-            with col_html:
-                st.download_button(
-                    label="Baixar HTML Completo",
-                    data=html_content,
-                    file_name="relatorio_trilhas.html",
-                    mime="text/html",
-                    key="download_html"
-                )
-            with col_eml:
-                msg = EmailMessage()
-                msg['Subject'] = "Status da Construção das Trilhas"
-                msg['From'] = "seu@email.com"
-                msg['To'] = "destinatario@email.com"
-                msg.set_content("Seu cliente de e-mail não suporta HTML. Veja o relatório em anexo.")
-                msg.add_alternative(html_content, subtype='html')
-                eml_bytes = msg.as_bytes()
-                st.download_button(
-                    label="Baixar E-mail (EML)",
-                    data=eml_bytes,
-                    file_name="relatorio_trilhas.eml",
-                    mime="message/rfc822",
-                    key="download_eml"
-                )
-        st.success('Relatório exportado como HTML completo!')
-
-    # Exportar como PDF (usando pdfkit)
-    if st.button('Exportar como PDF (Estilizado)'):
-        # Gera o mesmo HTML estilizado e converte para PDF
-        pdfkit.from_file('relatorio_trilhas.html', 'relatorio_trilhas.pdf')
-        with open('relatorio_trilhas.pdf', 'rb') as f:
-            st.download_button('Baixar PDF', f, file_name='relatorio_trilhas.pdf', mime='application/pdf')
-        st.success('Relatório exportado como PDF!')
-
-    # Exportar como Imagem (apenas gráficos principais)
-    if st.button('Exportar Gráficos como Imagem (PNG)'):
-        fig.savefig('grafico_trilhas.png')
-        with open('grafico_trilhas.png', 'rb') as f:
-            st.download_button('Baixar Gráfico PNG', f, file_name='grafico_trilhas.png', mime='image/png')
-        st.success('Gráfico exportado como imagem PNG!')
-else:
-    st.info('Faça upload das duas planilhas Excel para visualizar o relatório.') 
+    fig4.savefig('grafico_aprovador.png')
+    with open('grafico_aprovador.png', 'rb') as img_file:
+        grafico_aprovador_base64 = base64.b64encode(img_file.read()).decode('utf-8')
+    fig3.savefig('grafico_passos_equipes.png')
+    with open('grafico_passos_equipes.png', 'rb') as img_file:
+        grafico_passos_equipes_base64 = base64.b64encode(img_file.read()).decode('utf-8')
+    # Tabelas em HTML
+    status_aprov_html = zebra_table(status_aprov.to_html(index=True, border=0, classes='styled-table')) if 'status_aprov' in locals() else ''
+    passos_equipes_html = zebra_table(passos_equipes.to_html(index=False, border=0, classes='styled-table')) if 'passos_equipes' in locals() else ''
+    # Adicionar todas as seções no HTML exportado
+    with open('public/sipal_logo.png', 'rb') as img_file:
+        logo_base64 = base64.b64encode(img_file.read()).decode('utf-8')
+    # Gerar indicadores_gerais_html para exportação
+    indicadores_gerais_html = f'''
+    <div class="section" style="margin-top:0;margin-bottom:24px;">
+        <div class="section-title" style="font-size:1.25em;margin-bottom:16px;">Comparativo com ciclo anterior</div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;">
+            <div style="flex:1 1 260px;min-width:220px;max-width:320px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:18px 12px;text-align:center;">
+                <div style="font-size:1.1em;color:#022928;font-weight:600;">Trilhas Aprovadas</div>
+                <div style="font-size:2em;font-weight:bold;color:#488432;">{total_aprovadas}</div>
+                <div style="font-size:1em;color:#64748b;">{ciclo}</div>
+                <div style="margin-top:8px;font-size:1em;color:{'#488432' if diff>=0 else '#c10000'};">{diff:+d} ({perc:.1f}%){' vs ' + ciclo_anterior if ciclo_anterior else ''}</div>
+            </div>
+            <div style="flex:1 1 260px;min-width:220px;max-width:320px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:18px 12px;text-align:center;">
+                <div style="font-size:1.1em;color:#022928;font-weight:600;">Trilhas Aprovadas c/ Variações e Dimensões</div>
+                <div style="font-size:2em;font-weight:bold;color:#3cb5c7;">{total_aprovadas_var_dim}</div>
+                <div style="font-size:1em;color:#64748b;">{ciclo}</div>
+                <div style="margin-top:8px;font-size:1em;color:{'#488432' if diff_var>=0 else '#c10000'};">{diff_var:+d} ({perc_var:.1f}%){' vs ' + ciclo_anterior if ciclo_anterior else ''}</div>
+            </div>
+        </div>
+    </div>
+    '''
+    # Garantir data de geração do relatório
+    data_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
+    html_content = f'''
+    <!DOCTYPE html>
+    <html lang="pt-br">
+    <head>
+        <meta charset="utf-8">
+        <title>Status da Construção das Trilhas - Ciclo 3</title>
+        <style>
+            body {{ margin: 0 !important; background: #fff !important; font-family: Arial, Helvetica, sans-serif; }}
+            .container {{ margin: 0 auto !important; max-width: 900px; background: #fff; border-radius: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; padding-bottom: 32px; border-left: 2px solid #e0e7ef; border-right: 2px solid #e0e7ef; border-top: none; border-bottom: none; min-height: 3000px !important; }}
+            .header {{ background: #022928; color: #fff; padding: 32px 32px 16px 32px; text-align: center; }}
+            .header-title {{ font-size: 2.3em; font-weight: 700; margin-bottom: 8px; }}
+            .header-logo {{ max-width: 110px; max-height: 80px; display: block; margin: 0 auto 12px auto; }}
+            .kpi-grid-wrapper {{ width: 100%; display: flex; justify-content: center; }}
+            .kpi-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 32px 0 24px 0; width: 100%; }}
+            .kpi-card {{ text-align: center; padding: 18px 8px 12px 8px; border-radius: 10px; border: 1px solid #f0f0f0; background: #f9fafb; }}
+            .kpi-total {{ background: #f9fafb; color: #374151; border-color: #e5e7eb; }}
+            .kpi-aprov {{ background: #ecfdf5; color: #22B573; border-color: #bbf7d0; }}
+            .kpi-exec {{ background: #f0f9ff; color: #3cb5c7; border-color: #bae6fd; }}
+            .kpi-bloq {{ background: #fef2f2; color: #c10000; border-color: #fecaca; }}
+            .kpi-pend {{ background: #f9fafb; color: #64748b; border-color: #e5e7eb; }}
+            .kpi-perc {{ background: #f0fdf4; color: #488432; border-color: #bbf7d0; }}
+            .kpi-dias {{ background: #f0f9ff; color: #022928; border-color: #bae6fd; }}
+            .kpi-value {{ font-size: 1.7em; font-weight: bold; margin-bottom: 2px; }}
+            .kpi-label {{ font-size: 0.95em; color: inherit; font-weight: 500; }}
+            .section {{ margin: 0 24px 36px 24px; background: #fff; border-radius: 12px; padding: 32px 24px 24px 24px; box-shadow: 0 2px 8px #0001; }}
+            .section-title {{ color: #022928; font-size: 1.6em; font-weight: 700; margin-bottom: 18px; }}
+            .table-container {{ background: #fff; border-radius: 10px; box-shadow: 0 1px 4px #0001; padding: 18px 8px 8px 8px; margin-bottom: 24px; overflow-x: auto; }}
+            .img-container {{ text-align: center; margin: 32px 0 0 0; }}
+            .img-container img {{ max-width: 100%; border-radius: 10px; box-shadow: 0 2px 8px #0001; }}
+            .footer {{ background: #f1f5f9; padding: 20px 30px; text-align: center; color: #64748b; font-size: 0.95em; border-top: 1px solid #e2e8f0; }}
+            .table-container table {{ width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border-radius: 12px; overflow: hidden; font-size: 1em; margin: 0; box-shadow: 0 1px 4px #0001; }}
+            .table-container th {{ background: #022928; color: #fff; padding: 12px 8px; text-align: center; font-weight: 700; border-bottom: 2px solid #e0e0e0; }}
+            .table-container td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f0f0f0; background: #fff; }}
+            .table-container tr:nth-child(even) td {{ background: #f4f8fb; }}
+            .table-container tr:hover td {{ background: #e6f7f1; }}
+            .table-container tr:last-child td,
+            .table-container tr.total-row td {{ background: #e6f7f1 !important; font-weight: bold; color: #022928; }}
+            .table-container tr:last-child td {{ border-bottom: none; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <img src="data:image/png;base64,{logo_base64}" alt="Logo SIPAL Digital" class="header-logo" />
+                <div class="header-title">STATUS DA CONSTRUÇÃO DAS TRILHAS</div>
+            </div>
+            <div class="kpi-grid-wrapper">
+              <div class="kpi-grid">
+                <div class="kpi-card kpi-total">
+                    <div class="kpi-value">{total_trilhas}</div>
+                    <div class="kpi-label">Total de Trilhas</div>
+                </div>
+                <div class="kpi-card kpi-aprov">
+                    <div class="kpi-value">{aprovadas}</div>
+                    <div class="kpi-label">Aprovadas</div>
+                </div>
+                <div class="kpi-card kpi-exec">
+                    <div class="kpi-value">{em_andamento}</div>
+                    <div class="kpi-label">Em andamento</div>
+                </div>
+                <div class="kpi-card kpi-perc">
+                    <div class="kpi-value">{percentual_aprov_geral:.1f}%</div>
+                    <div class="kpi-label">% Aprovação Geral</div>
+                </div>
+                <div class="kpi-card kpi-dias">
+                    <div class="kpi-value">{dias_restantes}</div>
+                    <div class="kpi-label">Restam dias para o prazo<br><span style='font-size:0.9em;color:#3cb5c7;'>(18/07/2025)</span></div>
+                </div>
+              </div>
+            </div>
+            {indicadores_gerais_html}
+            <div class="section">
+                <div class="section-title">Status de Aprovação</div>
+                <div class="table-container">{status_aprov_html}</div>
+            </div>
+            <div class="section">
+                <div class="section-title">Resumo por Frente</div>
+                <div class="table-container">{resumo_frente_html}</div>
+                <div style="font-size:0.98em;color:#64748b;margin:8px 0 0 4px;"><em>* Listado apenas Frentes com trilhas criadas para o ciclo</em></div>
+                <div class="img-container"><img src="data:image/png;base64,{grafico_trilhas_base64}" /></div>
+            </div>
+            <div class="section">
+                <div class="section-title">Resumo por Aprovador Responsável</div>
+                <div class="table-container">{resumo_aprovador_html}</div>
+                <div style="font-size:0.98em;color:#64748b;margin:8px 0 0 4px;"><em>* Listado apenas Donos de Processo com trilhas definidas em seu nome</em></div>
+                <div class="img-container"><img src="data:image/png;base64,{grafico_aprovador_base64}" /></div>
+            </div>
+            <div class="section">
+                <div class="section-title">Passos por Equipe</div>
+                <div class="table-container">{passos_equipes_html}</div>
+                <div class="img-container"><img src="data:image/png;base64,{grafico_passos_equipes_base64}" /></div>
+            </div>
+            <div class="footer">
+                Relatório gerado automaticamente em {data_atual}.<br/>
+                <span style="color:#022928;font-weight:bold;">SIPAL +DIGITAL</span>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+    # Ajuste no CSS do HTML para remover margens externas e garantir altura suficiente
+    html_content = html_content.replace('body {', 'body { margin: 0 !important; background: #fff !important;')
+    html_content = html_content.replace('.container {', '.container { margin: 0 auto !important; min-height: 3000px !important;')
+    with open('relatorio_trilhas.html', 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    with open('relatorio_trilhas.html', 'rb') as f:
+        col_html, col_eml = st.columns(2)
+        with col_html:
+            st.download_button(
+                label="Baixar HTML Completo",
+                data=html_content,
+                file_name="relatorio_trilhas.html",
+                mime="text/html",
+                key="download_html"
+            )
+        with col_eml:
+            msg = EmailMessage()
+            msg['Subject'] = "Status da Construção das Trilhas"
+            msg['From'] = "seu@email.com"
+            msg['To'] = "destinatario@email.com"
+            msg.set_content("Seu cliente de e-mail não suporta HTML. Veja o relatório em anexo.")
+            msg.add_alternative(html_content, subtype='html')
+            eml_bytes = msg.as_bytes()
+            st.download_button(
+                label="Baixar E-mail (EML)",
+                data=eml_bytes,
+                file_name="relatorio_trilhas.eml",
+                mime="message/rfc822",
+                key="download_eml"
+            )
+    st.success('Relatório exportado como HTML completo!')
