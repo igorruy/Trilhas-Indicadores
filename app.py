@@ -11,6 +11,10 @@ from reportlab.pdfgen import canvas
 import tempfile
 import os
 import pdfkit
+from datetime import datetime
+import email
+from email.message import EmailMessage
+import base64
 
 st.set_page_config(page_title='Status da Construção das Trilhas', layout='wide')
 
@@ -243,85 +247,169 @@ if uploaded_file and uploaded_file_itens:
     fig.savefig('grafico_trilhas.png')
     grafico_trilhas_base64 = ''
     with open('grafico_trilhas.png', 'rb') as img_file:
-        import base64
         grafico_trilhas_base64 = base64.b64encode(img_file.read()).decode('utf-8')
 
     # Exportar como HTML estilizado com todos os indicadores
     if st.button('Exportar como HTML (Completo)'):
+        data_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
+        # Estilo inline para tabelas
+        table_style = (
+            'style="border-collapse:separate;border-spacing:0;width:100%;font-size:1rem;background:#fff;"'
+        )
+        th_style = (
+            'style="background:#0074C1;color:#fff;padding:10px 6px;text-align:center;border-bottom:2px solid #e0e0e0;font-weight:600;"'
+        )
+        td_style = (
+            'style="padding:10px 6px;text-align:center;border-bottom:1px solid #f0f0f0;"'
+        )
+        def zebra_table(html):
+            linhas = html.split('<tr>')
+            resultado = [linhas[0]]  # Cabeçalho antes do primeiro <tr>
+            for i, linha in enumerate(linhas[1:]):
+                cor = '#f9fbfd' if i % 2 == 0 else '#fff'
+                resultado.append(f'<tr style="background:{cor};">{linha}')
+            html = ''.join(resultado)
+            html = html.replace('<table border="0" class="styled-table"', f'<table {table_style}') \
+                       .replace('<th>', f'<th {th_style}>') \
+                       .replace('<td>', f'<td {td_style}>')
+            return html
+        # Gera as tabelas com classe para aplicar o estilo
+        resumo_frente_html = zebra_table(resumo_frente.to_html(index=True, border=0, classes='styled-table')) if 'resumo_frente' in locals() else ''
+        resumo_aprovador_html = zebra_table(resumo_aprovador.to_html(index=True, border=0, classes='styled-table')) if 'resumo_aprovador' in locals() else ''
+        passos_equipes_html = zebra_table(passos_equipes.to_html(index=True, border=0, classes='styled-table')) if 'passos_equipes' in locals() else ''
         html_content = f'''
-        <html>
+        <!DOCTYPE html>
+        <html lang="pt-br">
         <head>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: Arial, sans-serif; background: #f5f5f5; }}
-            .header {{ display: flex; align-items: center; background: #fff; padding: 16px; border-radius: 10px; margin-bottom: 16px; }}
-            .logo {{ width: 120px; height: 60px; background: #eee; border-radius: 8px; margin-right: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #888; }}
-            .title {{ font-size: 2rem; font-weight: bold; color: #0074C1; }}
-            .kpi-row {{ display: flex; gap: 24px; margin-bottom: 16px; }}
-            .kpi-card {{ background: #fff; border-radius: 10px; padding: 18px 32px; box-shadow: 0 2px 8px #0001; min-width: 200px; text-align: center; }}
-            .kpi-label {{ font-size: 1.1rem; color: #888; }}
-            .kpi-value {{ font-size: 2.2rem; font-weight: bold; color: #22B573; }}
-            .kpi-diff {{ font-size: 1rem; color: #C10000; }}
-            .section {{ background: #fff; border-radius: 10px; padding: 18px 24px; margin-bottom: 18px; box-shadow: 0 2px 8px #0001; }}
-            h2 {{ color: #0074C1; }}
-            table {{ border-collapse: collapse; width: 100%; margin: 12px 0; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; }}
-            th {{ background: #0074C1; color: #fff; }}
-            .info-box {{ background: #FFD600; color: #222; border-radius: 8px; padding: 12px 18px; margin: 12px 0; font-weight: bold; }}
-            .img-graph {{ width: 100%; max-width: 600px; margin: 0 auto; display: block; }}
-        </style>
+            <meta charset="utf-8">
+            <title>Status da Construção das Trilhas</title>
         </head>
-        <body>
-            <div class="header">
-                <div class="logo">LOGO</div>
-                <div class="title">STATUS DA CONSTRUÇÃO DAS TRILHAS</div>
-            </div>
-            <div class="kpi-row">
-                <div class="kpi-card">
-                    <div class="kpi-label">Trilhas Aprovadas - {ciclo}</div>
-                    <div class="kpi-value">{total_aprovadas}</div>
-                    <div class="kpi-diff">{diff if 'diff' in locals() else ''}</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">Trilhas Aprovadas c/ Variações e Dimensões - {ciclo}</div>
-                    <div class="kpi-value">{total_aprovadas_var_dim}</div>
-                    <div class="kpi-diff">{diff_var if 'diff_var' in locals() else ''}</div>
-                </div>
-            </div>
-            <div class="section">
-                <h2>Status da Construção das Trilhas</h2>
-                {resumo_frente.to_html(index=True) if 'resumo_frente' in locals() else ''}
-            </div>
-            <div class="section">
-                <h2>Resumo por Aprovador Responsável</h2>
-                {resumo_aprovador.to_html(index=True) if 'resumo_aprovador' in locals() else ''}
-            </div>
-            <div class="section">
-                <h2>Gráfico de Status das Trilhas</h2>
-                <img class="img-graph" src="data:image/png;base64,{grafico_trilhas_base64}" />
-            </div>
-            <div class="section">
-                <h2>Passos por Equipe</h2>
-                {passos_equipes.to_html(index=True) if 'passos_equipes' in locals() else ''}
-            </div>
-            <div class="info-box">
-                INFORMATIVO: Espaço para mensagem customizada do projeto.
-            </div>
-            <div class="section">
-                <b>Como enviar por e-mail:</b><br>
-                1. Baixe este arquivo HTML.<br>
-                2. Abra o arquivo no navegador.<br>
-                3. Selecione todo o conteúdo (Ctrl+A), copie (Ctrl+C) e cole (Ctrl+V) no corpo do e-mail no Outlook.<br>
-                <br>
-                <a href="mailto:?subject=Status das Trilhas&body=Veja o relatório em anexo ou cole o HTML no corpo do e-mail.">Clique aqui para abrir o Outlook</a>
-            </div>
+        <body style="font-family: Arial, Verdana, sans-serif; background: #f4f8fb; margin: 0; padding: 0;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #f4f8fb;">
+              <tr>
+                <td align="center">
+                  <table width="700" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 18px; box-shadow: 0 2px 8px #0001; margin: 24px 0;">
+                    <tr>
+                      <td style="padding: 24px 24px 0 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                          <tr>
+                            <td style="width: 80px; height: 80px; background: #eee; border-radius: 12px; text-align: center; font-weight: bold; color: #888; font-size: 1.5rem; vertical-align: middle;">LOGO</td>
+                            <td style="padding-left: 32px; vertical-align: middle;"><span style="font-size: 2.2rem; font-weight: bold; color: #0074C1;">STATUS DA CONSTRUÇÃO DAS TRILHAS</span></td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 0 24px 0 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 24px 0 16px 0;">
+                          <tr>
+                            <td style="background: linear-gradient(135deg, #22B573 0%, #0074C1 100%); border-radius: 14px; padding: 24px 36px; color: #fff; text-align: center; font-size: 1.1rem; font-weight: bold; min-width: 220px;">
+                              Trilhas Aprovadas - {ciclo}<br>
+                              <span style="font-size: 2.2rem;">{total_aprovadas}</span><br>
+                              <span style="font-size: 1rem; color: #FFD600;">{diff if 'diff' in locals() else ''}</span>
+                            </td>
+                            <td width="24"></td>
+                            <td style="background: linear-gradient(135deg, #22B573 0%, #0074C1 100%); border-radius: 14px; padding: 24px 36px; color: #fff; text-align: center; font-size: 1.1rem; font-weight: bold; min-width: 220px;">
+                              Trilhas Aprovadas c/ Variações e Dimensões - {ciclo}<br>
+                              <span style="font-size: 2.2rem;">{total_aprovadas_var_dim}</span><br>
+                              <span style="font-size: 1rem; color: #FFD600;">{diff_var if 'diff_var' in locals() else ''}</span>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 0 24px 0 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; margin-bottom: 24px;">
+                          <tr><td style="padding: 24px 0 0 0;"><h2 style="color: #0074C1; margin: 0 0 12px 0;">Status da Construção das Trilhas</h2></td></tr>
+                          <tr><td>{resumo_frente_html}</td></tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 0 24px 0 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; margin-bottom: 24px;">
+                          <tr><td style="padding: 24px 0 0 0;"><h2 style="color: #0074C1; margin: 0 0 12px 0;">Resumo por Aprovador Responsável</h2></td></tr>
+                          <tr><td>{resumo_aprovador_html}</td></tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 0 24px 0 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; margin-bottom: 24px;">
+                          <tr><td style="padding: 24px 0 0 0;"><h2 style="color: #0074C1; margin: 0 0 12px 0;">Gráfico de Status das Trilhas</h2></td></tr>
+                          <tr><td><img src="data:image/png;base64,{grafico_trilhas_base64}" style="width: 100%; max-width: 600px; border-radius: 10px; display: block; margin: 0 auto 18px auto; box-shadow: 0 2px 8px #0001;" /></td></tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 0 24px 0 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; margin-bottom: 24px;">
+                          <tr><td style="padding: 24px 0 0 0;"><h2 style="color: #0074C1; margin: 0 0 12px 0;">Passos por Equipe</h2></td></tr>
+                          <tr><td>{passos_equipes_html}</td></tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 0 24px 0 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                          <tr><td style="background: #FFD600; color: #222; border-radius: 8px; padding: 14px 20px; font-weight: bold; font-size: 1.1rem;">INFORMATIVO: Espaço para mensagem customizada do projeto.</td></tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 0 24px 0 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                          <tr><td style="padding: 18px 0 0 0; font-size: 1rem;">
+                            <b>Como enviar por e-mail:</b><br>
+                            1. Baixe este arquivo HTML.<br>
+                            2. Abra o arquivo no navegador.<br>
+                            3. Selecione todo o conteúdo (Ctrl+A), copie (Ctrl+C) e cole (Ctrl+V) no corpo do e-mail no Outlook.<br>
+                            <br>
+                            <a href="mailto:?subject=Status das Trilhas&body=Veja o relatório em anexo ou cole o HTML no corpo do e-mail." style="color: #0074C1;">Clique aqui para abrir o Outlook</a>
+                          </td></tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="text-align: center; color: #888; font-size: 0.95rem; padding: 32px 0 12px 0;">
+                        Relatório gerado automaticamente em {data_atual}.
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
         </body>
         </html>
         '''
         with open('relatorio_trilhas.html', 'w', encoding='utf-8') as f:
             f.write(html_content)
         with open('relatorio_trilhas.html', 'rb') as f:
-            st.download_button('Baixar HTML Completo', f, file_name='relatorio_trilhas.html', mime='text/html')
+            col_html, col_eml = st.columns(2)
+            with col_html:
+                st.download_button(
+                    label="Baixar HTML Completo",
+                    data=html_content,
+                    file_name="relatorio_trilhas.html",
+                    mime="text/html",
+                    key="download_html"
+                )
+            with col_eml:
+                msg = EmailMessage()
+                msg['Subject'] = "Status da Construção das Trilhas"
+                msg['From'] = "seu@email.com"
+                msg['To'] = "destinatario@email.com"
+                msg.set_content("Seu cliente de e-mail não suporta HTML. Veja o relatório em anexo.")
+                msg.add_alternative(html_content, subtype='html')
+                eml_bytes = msg.as_bytes()
+                st.download_button(
+                    label="Baixar E-mail (EML)",
+                    data=eml_bytes,
+                    file_name="relatorio_trilhas.eml",
+                    mime="message/rfc822",
+                    key="download_eml"
+                )
         st.success('Relatório exportado como HTML completo!')
 
     # Exportar como PDF (usando pdfkit)
