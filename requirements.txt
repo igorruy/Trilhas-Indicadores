@@ -9,4 +9,5 @@ pdfkit
 imgkit
 html2image
 selenium
-pyppeteer 
+pyppeteer
+openpyxl 
