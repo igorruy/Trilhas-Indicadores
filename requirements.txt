@@ -1,10 +1,12 @@
 streamlit
 pandas
-openpyxl
 matplotlib
-Pillow
-streamlit-extras
+pillow
+numpy
 plotly
-streamlit-html-export
 reportlab
-pdfkit 
+pdfkit
+imgkit
+html2image
+selenium
+pyppeteer 
