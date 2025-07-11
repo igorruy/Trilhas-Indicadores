@@ -31,6 +31,25 @@ st.set_page_config(page_title='Status da Construção das Trilhas', layout='wide
 
 st.title('STATUS DA CONSTRUÇÃO DAS TRILHAS')
 
+# Campos de comentário e tipo SEMPRE visíveis
+col_coment, col_tipo = st.columns([3,1])
+with col_coment:
+    comentario_sessao = st.text_area('Comentário para esta sessão (opcional):', key='comentario_sessao')
+with col_tipo:
+    tipo_comentario = st.selectbox('Tipo do comentário:', options=['Informativo', 'Atenção'], key='tipo_comentario')
+
+# Função para gerar HTML do comentário
+def gerar_comentario_html(texto, tipo):
+    if not texto:
+        return ''
+    if tipo == 'Atenção':
+        return f'''<div style="background:#ffeaea;border-left:6px solid #c10000;padding:14px 18px 14px 18px;margin-bottom:18px;border-radius:8px;font-size:1.08em;color:#c10000;font-weight:600;display:flex;align-items:center;"><span style='font-size:1.5em;margin-right:10px;'>&#9888;&#65039;</span>{texto}</div>'''
+    else:
+        return f'''<div style="background:#f0f9ff;border-left:6px solid #0074C1;padding:14px 18px 14px 18px;margin-bottom:18px;border-radius:8px;font-size:1.08em;color:#022928;display:flex;align-items:center;"><span style='font-size:1.5em;margin-right:10px;'>&#8505;</span>{texto}</div>'''
+
+# Remover os campos de comentário de sessão agrupados do topo
+# Adicionar cada campo de comentário e tipo logo após o st.subheader de cada sessão
+
 col_upload1, col_upload2 = st.columns(2)
 with col_upload1:
     uploaded_file = st.file_uploader('Selecione o arquivo Excel com as trilhas:', type=['xlsx'], key='uploader1')
@@ -82,6 +101,11 @@ grafico_trilhas_base64 = ''
 grafico_aprovador_base64 = ''
 grafico_passos_equipes_base64 = ''
 data_atual = ''
+
+# Definir variáveis de comentário de sessão como string vazia para evitar erro de variável não definida
+comentario_html_frente = ''
+comentario_html_aprov = ''
+comentario_html_passos = ''
 
 if uploaded_file and uploaded_file_itens:
     df = pd.read_excel(uploaded_file, sheet_name='Trilhas Detalhadas')
@@ -139,6 +163,13 @@ if uploaded_file and uploaded_file_itens:
         df_filtrado = df_filtrado[df_filtrado[col_frente].isin(frente)]
     if col_ciclo and isinstance(col_ciclo, str) and col_ciclo in df_filtrado.columns and ciclo:
         df_filtrado = df_filtrado[df_filtrado[col_ciclo] == ciclo]
+
+    # Após os uploads e antes dos cálculos principais, adicionar campos para comentário e tipo
+    # col_coment, col_tipo = st.columns([3,1]) # Moved outside
+    # with col_coment: # Moved outside
+    #     comentario_sessao = st.text_area('Comentário para esta sessão (opcional):', key='comentario_sessao') # Moved outside
+    # with col_tipo: # Moved outside
+    #     tipo_comentario = st.selectbox('Tipo do comentário:', options=['Informativo', 'Atenção'], key='tipo_comentario') # Moved outside
 
     # ... cálculo das variáveis ...
     # Calcule dias restantes para o prazo de entrega
@@ -226,12 +257,37 @@ if uploaded_file and uploaded_file_itens:
     st.subheader('Status de Aprovação')
     if col_status_aprov and isinstance(col_status_aprov, str) and col_status_aprov in df_filtrado.columns:
         status_aprov = df_filtrado.groupby(col_status_aprov).size().reset_index(name='Quantidade')
-        st.dataframe(status_aprov)
+        # Calcular status do ciclo anterior, se possível
+        status_aprov_ant = None
+        if ciclo and ciclo_options and ciclo in ciclo_options:
+            idx_ciclo = ciclo_options.index(ciclo)
+            if idx_ciclo > 0:
+                ciclo_anterior = ciclo_options[idx_ciclo - 1]
+                df_ant = df[df[col_ciclo] == ciclo_anterior] if col_ciclo in df.columns else df.copy()
+                status_aprov_ant = df_ant.groupby(col_status_aprov).size().reset_index(name='Quantidade Anterior')
+        # Merge para diferença absoluta e percentual
+        if status_aprov_ant is not None:
+            status_diff = pd.merge(status_aprov, status_aprov_ant, on=col_status_aprov, how='outer').fillna(0)
+            status_diff['Diferença'] = status_diff['Quantidade'] - status_diff['Quantidade Anterior']
+            status_diff['Diferença %'] = status_diff.apply(lambda row: ((row['Diferença'] / row['Quantidade Anterior']) * 100) if row['Quantidade Anterior'] else 0, axis=1)
+            status_diff['Diferença'] = status_diff['Diferença'].astype(int)
+            status_diff['Quantidade Anterior'] = status_diff['Quantidade Anterior'].astype(int)
+            st.dataframe(status_diff[[col_status_aprov, 'Quantidade', 'Quantidade Anterior', 'Diferença', 'Diferença %']])
+            # Tabela só de diferença percentual
+            st.markdown('**% Diferença por Status em relação ao ciclo anterior:**')
+            st.dataframe(status_diff[[col_status_aprov, 'Diferença %']])
+        else:
+            st.dataframe(status_aprov)
     else:
         st.warning('Coluna de status de aprovação não encontrada.')
 
     # --- TABELA RESUMO POR FRENTE ---
     st.subheader('Resumo por Frente')
+    col_coment_frente, col_tipo_frente = st.columns([3,1])
+    with col_coment_frente:
+        comentario_frente = st.text_area('Comentário para Resumo por Frente (opcional):', key='comentario_frente')
+    with col_tipo_frente:
+        tipo_comentario_frente = st.selectbox('Tipo do comentário:', options=['Informativo', 'Atenção'], key='tipo_comentario_frente')
     if col_frente and col_status_aprov and col_frente in df_filtrado.columns and col_status_aprov in df_filtrado.columns:
         # Calcular aprovados e outros status
         aprovados = df_filtrado[df_filtrado[col_status_aprov] == 'Aprovado'].groupby(col_frente)[col_trilha].count()
@@ -303,6 +359,11 @@ if uploaded_file and uploaded_file_itens:
 
     # --- TABELA RESUMO POR APROVADOR RESPONSÁVEL ---
     st.subheader('Resumo por Aprovador Responsável')
+    col_coment_aprov, col_tipo_aprov = st.columns([3,1])
+    with col_coment_aprov:
+        comentario_aprov = st.text_area('Comentário para Resumo por Aprovador Responsável (opcional):', key='comentario_aprov')
+    with col_tipo_aprov:
+        tipo_comentario_aprov = st.selectbox('Tipo do comentário:', options=['Informativo', 'Atenção'], key='tipo_comentario_aprov')
     if col_dono and col_status_aprov and col_dono in df_filtrado.columns and col_status_aprov in df_filtrado.columns:
         aprovados_aprov = df_filtrado[df_filtrado[col_status_aprov] == 'Aprovado'].groupby(col_dono)[col_trilha].count()
         outros_aprov = df_filtrado[df_filtrado[col_status_aprov] != 'Aprovado'].groupby(col_dono)[col_trilha].count()
@@ -381,6 +442,11 @@ if uploaded_file and uploaded_file_itens:
 
     # Nova tabela e gráfico de passos por Equipe
     st.subheader('Passos por Equipe')
+    col_coment_passos, col_tipo_passos = st.columns([3,1])
+    with col_coment_passos:
+        comentario_passos = st.text_area('Comentário para Passos por Equipe (opcional):', key='comentario_passos')
+    with col_tipo_passos:
+        tipo_comentario_passos = st.selectbox('Tipo do comentário:', options=['Informativo', 'Atenção'], key='tipo_comentario_passos')
     # Mapear status das trilhas aprovadas
     trilhas_aprovadas = set(df[df[col_status_aprov] == 'Aprovado']['Trilha_Base'])
     df_itens['Aprovado'] = df_itens['Trilha'].isin(trilhas_aprovadas)
@@ -450,21 +516,55 @@ if uploaded_file and uploaded_file_itens:
     # Tabelas em HTML
     status_aprov_html = zebra_table(status_aprov.to_html(index=True, border=0, classes='styled-table')) if 'status_aprov' in locals() else ''
     passos_equipes_html = zebra_table(passos_equipes.to_html(index=False, border=0, classes='styled-table')) if 'passos_equipes' in locals() else ''
+    # Gerar HTML das tabelas de status de aprovação com diferença, se houver
+    status_aprov_html_diff = ''
+    status_aprov_html_diff_perc = ''
+    if col_status_aprov and isinstance(col_status_aprov, str) and col_status_aprov in df_filtrado.columns:
+        status_aprov = df_filtrado.groupby(col_status_aprov).size().reset_index(name='Quantidade')
+        status_aprov_ant = None
+        if ciclo and ciclo_options and ciclo in ciclo_options:
+            idx_ciclo = ciclo_options.index(ciclo)
+            if idx_ciclo > 0:
+                ciclo_anterior = ciclo_options[idx_ciclo - 1]
+                df_ant = df[df[col_ciclo] == ciclo_anterior] if col_ciclo in df.columns else df.copy()
+                status_aprov_ant = df_ant.groupby(col_status_aprov).size().reset_index(name='Quantidade Anterior')
+        if status_aprov_ant is not None:
+            status_diff = pd.merge(status_aprov, status_aprov_ant, on=col_status_aprov, how='outer').fillna(0)
+            status_diff['Diferença'] = status_diff['Quantidade'] - status_diff['Quantidade Anterior']
+            status_diff['Diferença %'] = status_diff.apply(lambda row: ((row['Diferença'] / row['Quantidade Anterior']) * 100) if row['Quantidade Anterior'] else 0, axis=1)
+            status_diff['Diferença'] = status_diff['Diferença'].astype(int)
+            status_diff['Quantidade Anterior'] = status_diff['Quantidade Anterior'].astype(int)
+            status_diff['Diferença %'] = status_diff['Diferença %'].map(lambda x: f"{x:.1f}")
+            # Renomear coluna para incluir nome do ciclo anterior
+            nome_coluna_ant = f"Quantidade {ciclo_anterior}" if 'ciclo_anterior' in locals() and ciclo_anterior else "Quantidade Anterior"
+            status_diff = status_diff.rename(columns={'Quantidade Anterior': nome_coluna_ant})
+            status_aprov_html_diff = zebra_table(status_diff[[col_status_aprov, 'Quantidade', nome_coluna_ant, 'Diferença', 'Diferença %']].to_html(index=False, border=0, classes='styled-table'))
+        # Garantir que status_aprov_html_diff e status_aprov_html_diff_perc existam mesmo sem ciclo anterior
+        if 'status_aprov_html_diff' not in locals():
+            status_aprov_html_diff = '<div style="color:#888;font-size:1em;padding:8px 0;">Sem ciclo anterior para comparação.</div>'
+        if 'status_aprov_html_diff_perc' not in locals():
+            status_aprov_html_diff_perc = ''
     # Adicionar todas as seções no HTML exportado
     with open('public/sipal_logo.png', 'rb') as img_file:
         logo_base64 = base64.b64encode(img_file.read()).decode('utf-8')
     # Gerar indicadores_gerais_html para exportação
+    bg_card_trilhas = "#fff"
+    bg_card_var_dim = "#fff"
+    if diff < 0:
+        bg_card_trilhas = "#ffeaea"
+    if diff_var < 0:
+        bg_card_var_dim = "#ffeaea"
     indicadores_gerais_html = f'''
     <div class="section" style="margin-top:0;margin-bottom:24px;">
         <div class="section-title" style="font-size:1.25em;margin-bottom:16px;">Comparativo com ciclo anterior</div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;">
-            <div style="flex:1 1 260px;min-width:220px;max-width:320px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:18px 12px;text-align:center;">
+            <div style="flex:1 1 260px;min-width:220px;max-width:320px;background:{bg_card_trilhas};border:1.5px solid #e5e7eb;border-radius:12px;padding:18px 12px;text-align:center;">
                 <div style="font-size:1.1em;color:#022928;font-weight:600;">Trilhas Aprovadas</div>
                 <div style="font-size:2em;font-weight:bold;color:#488432;">{total_aprovadas}</div>
                 <div style="font-size:1em;color:#64748b;">{ciclo}</div>
                 <div style="margin-top:8px;font-size:1em;color:{'#488432' if diff>=0 else '#c10000'};">{diff:+d} ({perc:.1f}%){' vs ' + ciclo_anterior if ciclo_anterior else ''}</div>
             </div>
-            <div style="flex:1 1 260px;min-width:220px;max-width:320px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:18px 12px;text-align:center;">
+            <div style="flex:1 1 260px;min-width:220px;max-width:320px;background:{bg_card_var_dim};border:1.5px solid #e5e7eb;border-radius:12px;padding:18px 12px;text-align:center;">
                 <div style="font-size:1.1em;color:#022928;font-weight:600;">Trilhas Aprovadas c/ Variações e Dimensões</div>
                 <div style="font-size:2em;font-weight:bold;color:#3cb5c7;">{total_aprovadas_var_dim}</div>
                 <div style="font-size:1em;color:#64748b;">{ciclo}</div>
@@ -475,6 +575,18 @@ if uploaded_file and uploaded_file_itens:
     '''
     # Garantir data de geração do relatório
     data_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
+    # Gerar bloco de comentário para HTML
+    comentario_html = ''
+    if comentario_sessao:
+        if tipo_comentario == 'Atenção':
+            comentario_html = f'''<div style="background:#ffeaea;border-left:6px solid #c10000;padding:14px 18px 14px 18px;margin-bottom:18px;border-radius:8px;font-size:1.08em;color:#c10000;font-weight:600;display:flex;align-items:center;"><span style='font-size:1.5em;margin-right:10px;'>&#9888;&#65039;</span>{comentario_sessao}</div>'''
+        else:
+            comentario_html = f'''<div style="background:#f0f9ff;border-left:6px solid #0074C1;padding:14px 18px 14px 18px;margin-bottom:18px;border-radius:8px;font-size:1.08em;color:#022928;display:flex;align-items:center;"><span style='font-size:1.5em;margin-right:10px;'>&#8505;</span>{comentario_sessao}</div>'''
+    # Gerar HTML dos comentários de sessão após os campos de texto
+    comentario_html_frente = gerar_comentario_html(comentario_frente, tipo_comentario_frente)
+    comentario_html_aprov = gerar_comentario_html(comentario_aprov, tipo_comentario_aprov)
+    comentario_html_passos = gerar_comentario_html(comentario_passos, tipo_comentario_passos)
+    # Ao montar o HTML, insira comentario_html no início de cada seção relevante:
     html_content = f'''
     <!DOCTYPE html>
     <html lang="pt-br">
@@ -513,6 +625,7 @@ if uploaded_file and uploaded_file_itens:
             .table-container tr:last-child td,
             .table-container tr.total-row td {{ background: #e6f7f1 !important; font-weight: bold; color: #022928; }}
             .table-container tr:last-child td {{ border-bottom: none; }}
+            .comentario-inicial-html {{ margin: 0 24px 24px 24px; }}
         </style>
     </head>
     <body>
@@ -546,24 +659,28 @@ if uploaded_file and uploaded_file_itens:
               </div>
             </div>
             {indicadores_gerais_html}
+            <div class="comentario-inicial-html">{comentario_html if comentario_html else ''}</div>
             <div class="section">
                 <div class="section-title">Status de Aprovação</div>
-                <div class="table-container">{status_aprov_html}</div>
+                <div class="table-container">{status_aprov_html_diff}</div>
             </div>
             <div class="section">
                 <div class="section-title">Resumo por Frente</div>
+                {comentario_html_frente}
                 <div class="table-container">{resumo_frente_html}</div>
                 <div style="font-size:0.98em;color:#64748b;margin:8px 0 0 4px;"><em>* Listado apenas Frentes com trilhas criadas para o ciclo</em></div>
                 <div class="img-container"><img src="data:image/png;base64,{grafico_trilhas_base64}" /></div>
             </div>
             <div class="section">
                 <div class="section-title">Resumo por Aprovador Responsável</div>
+                {comentario_html_aprov}
                 <div class="table-container">{resumo_aprovador_html}</div>
                 <div style="font-size:0.98em;color:#64748b;margin:8px 0 0 4px;"><em>* Listado apenas Donos de Processo com trilhas definidas em seu nome</em></div>
                 <div class="img-container"><img src="data:image/png;base64,{grafico_aprovador_base64}" /></div>
             </div>
             <div class="section">
                 <div class="section-title">Passos por Equipe</div>
+                {comentario_html_passos}
                 <div class="table-container">{passos_equipes_html}</div>
                 <div class="img-container"><img src="data:image/png;base64,{grafico_passos_equipes_base64}" /></div>
             </div>
