@@ -174,7 +174,7 @@ if uploaded_file and uploaded_file_itens:
     # ... cálculo das variáveis ...
     # Calcule dias restantes para o prazo de entrega
     data_final = datetime(2025, 7, 18)
-    dias_restantes = (data_final - datetime.now()).days
+    dias_restantes = (data_final - datetime.now()).days + 1
     # Corrigir o valor de 'Em andamento'
     if isinstance(df_filtrado, pd.DataFrame):
         total_trilhas = int(df_filtrado[col_trilha].nunique()) if col_trilha and col_trilha in df_filtrado.columns else 0
