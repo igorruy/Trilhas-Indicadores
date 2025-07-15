@@ -32,11 +32,13 @@ st.set_page_config(page_title='Status da Construção das Trilhas', layout='wide
 st.title('STATUS DA CONSTRUÇÃO DAS TRILHAS')
 
 # Campos de comentário e tipo SEMPRE visíveis
-col_coment, col_tipo = st.columns([3,1])
+col_coment, col_tipo, col_corte = st.columns([3,1,2])
 with col_coment:
     comentario_sessao = st.text_area('Comentário para esta sessão (opcional):', key='comentario_sessao')
 with col_tipo:
     tipo_comentario = st.selectbox('Tipo do comentário:', options=['Informativo', 'Atenção'], key='tipo_comentario')
+with col_corte:
+    data_corte = st.text_input('Data e horário de corte (ex: 10/06/2024 18:00):', key='data_corte')
 
 # Função para gerar HTML do comentário
 def gerar_comentario_html(texto, tipo):
@@ -293,17 +295,41 @@ if uploaded_file and uploaded_file_itens:
         aprovados = df_filtrado[df_filtrado[col_status_aprov] == 'Aprovado'].groupby(col_frente)[col_trilha].count()
         outros = df_filtrado[df_filtrado[col_status_aprov] != 'Aprovado'].groupby(col_frente)[col_trilha].count()
         total = df_filtrado.groupby(col_frente)[col_trilha].count()
+        # Calcular totais do ciclo anterior por frente
+        total_ant = None
+        diff_total = None
+        nome_coluna_ant = ''
+        if ciclo and ciclo_options and ciclo in ciclo_options:
+            idx_ciclo = ciclo_options.index(ciclo)
+            if idx_ciclo > 0:
+                ciclo_anterior_nome = ciclo_options[idx_ciclo - 1]
+                nome_coluna_ant = f'Total {ciclo_anterior_nome}'
+                df_ant = df[df[col_ciclo] == ciclo_anterior_nome] if col_ciclo in df.columns else df.copy()
+                total_ant = df_ant.groupby(col_frente)[col_trilha].count()
+                # Garantir que todos os frentes do ciclo atual estejam presentes
+                total_ant = total_ant.reindex(total.index).fillna(0).astype(int)
+                diff_total = total - total_ant
+            else:
+                nome_coluna_ant = 'Total ciclo anterior'
+                total_ant = pd.Series([0]*len(total), index=total.index)
+                diff_total = total
+        else:
+            nome_coluna_ant = 'Total ciclo anterior'
+            total_ant = pd.Series([0]*len(total), index=total.index)
+            diff_total = total
         resumo_frente = pd.DataFrame({
             'Aprovados': aprovados,
             'Em andamento': outros,
-            'Total': total
+            'Total': total,
+            nome_coluna_ant: total_ant,
+            'Diferença Total': diff_total
         }).fillna(0).astype(int)
         resumo_frente['% Aprovado'] = 100 * resumo_frente['Aprovados'] / resumo_frente['Total']
         resumo_frente['% Em andamento'] = 100 * resumo_frente['Em andamento'] / resumo_frente['Total']
         # Formatar porcentagens para uma casa decimal
         resumo_frente['% Aprovado'] = resumo_frente['% Aprovado'].map(lambda x: f"{x:.1f}")
         resumo_frente['% Em andamento'] = resumo_frente['% Em andamento'].map(lambda x: f"{x:.1f}")
-        resumo_frente = resumo_frente[['Aprovados', 'Em andamento', 'Total', '% Aprovado', '% Em andamento']]
+        resumo_frente = resumo_frente[['Aprovados', 'Em andamento', 'Total', nome_coluna_ant, 'Diferença Total', '% Aprovado', '% Em andamento']]
         st.dataframe(resumo_frente)
         # Gráfico de barras empilhadas para %
         COLOR_VERDE = '#22B573'
@@ -343,6 +369,8 @@ if uploaded_file and uploaded_file_itens:
                 'Aprovados': resumo_frente['Aprovados'].sum(),
                 'Em andamento': resumo_frente['Em andamento'].sum(),
                 'Total': resumo_frente['Total'].sum(),
+                nome_coluna_ant: resumo_frente[nome_coluna_ant].sum(),
+                'Diferença Total': resumo_frente['Diferença Total'].sum(),
                 '% Aprovado': f"{resumo_frente['% Aprovado'].astype(float).mean():.1f}",
                 '% Em andamento': f"{resumo_frente['% Em andamento'].astype(float).mean():.1f}"
             }
@@ -368,17 +396,40 @@ if uploaded_file and uploaded_file_itens:
         aprovados_aprov = df_filtrado[df_filtrado[col_status_aprov] == 'Aprovado'].groupby(col_dono)[col_trilha].count()
         outros_aprov = df_filtrado[df_filtrado[col_status_aprov] != 'Aprovado'].groupby(col_dono)[col_trilha].count()
         total_aprov = df_filtrado.groupby(col_dono)[col_trilha].count()
+        # Calcular totais do ciclo anterior por aprovador
+        total_ant_aprov = None
+        diff_total_aprov = None
+        nome_coluna_ant_aprov = ''
+        if ciclo and ciclo_options and ciclo in ciclo_options:
+            idx_ciclo = ciclo_options.index(ciclo)
+            if idx_ciclo > 0:
+                ciclo_anterior_nome = ciclo_options[idx_ciclo - 1]
+                nome_coluna_ant_aprov = f'Total {ciclo_anterior_nome}'
+                df_ant_aprov = df[df[col_ciclo] == ciclo_anterior_nome] if col_ciclo in df.columns else df.copy()
+                total_ant_aprov = df_ant_aprov.groupby(col_dono)[col_trilha].count()
+                total_ant_aprov = total_ant_aprov.reindex(total_aprov.index).fillna(0).astype(int)
+                diff_total_aprov = total_aprov - total_ant_aprov
+            else:
+                nome_coluna_ant_aprov = 'Total ciclo anterior'
+                total_ant_aprov = pd.Series([0]*len(total_aprov), index=total_aprov.index)
+                diff_total_aprov = total_aprov
+        else:
+            nome_coluna_ant_aprov = 'Total ciclo anterior'
+            total_ant_aprov = pd.Series([0]*len(total_aprov), index=total_aprov.index)
+            diff_total_aprov = total_aprov
         resumo_aprovador = pd.DataFrame({
             'Aprovados': aprovados_aprov,
             'Em andamento': outros_aprov,
-            'Total': total_aprov
+            'Total': total_aprov,
+            nome_coluna_ant_aprov: total_ant_aprov,
+            'Diferença Total': diff_total_aprov
         }).fillna(0).astype(int)
         resumo_aprovador['% Aprovado'] = 100 * resumo_aprovador['Aprovados'] / resumo_aprovador['Total']
         resumo_aprovador['% Em andamento'] = 100 * resumo_aprovador['Em andamento'] / resumo_aprovador['Total']
         # Formatar porcentagens para uma casa decimal
         resumo_aprovador['% Aprovado'] = resumo_aprovador['% Aprovado'].map(lambda x: f"{x:.1f}")
         resumo_aprovador['% Em andamento'] = resumo_aprovador['% Em andamento'].map(lambda x: f"{x:.1f}")
-        resumo_aprovador = resumo_aprovador[['Aprovados', 'Em andamento', 'Total', '% Aprovado', '% Em andamento']]
+        resumo_aprovador = resumo_aprovador[['Aprovados', 'Em andamento', 'Total', nome_coluna_ant_aprov, 'Diferença Total', '% Aprovado', '% Em andamento']]
         st.dataframe(resumo_aprovador)
         # Gráfico de barras empilhadas para %
         resumo_aprovador_plot = resumo_aprovador.copy()
@@ -416,6 +467,8 @@ if uploaded_file and uploaded_file_itens:
                 'Aprovados': resumo_aprovador['Aprovados'].sum(),
                 'Em andamento': resumo_aprovador['Em andamento'].sum(),
                 'Total': resumo_aprovador['Total'].sum(),
+                nome_coluna_ant_aprov: resumo_aprovador[nome_coluna_ant_aprov].sum(),
+                'Diferença Total': resumo_aprovador['Diferença Total'].sum(),
                 '% Aprovado': f"{resumo_aprovador['% Aprovado'].astype(float).mean():.1f}",
                 '% Em andamento': f"{resumo_aprovador['% Em andamento'].astype(float).mean():.1f}"
             }
@@ -661,10 +714,6 @@ if uploaded_file and uploaded_file_itens:
             {indicadores_gerais_html}
             <div class="comentario-inicial-html">{comentario_html if comentario_html else ''}</div>
             <div class="section">
-                <div class="section-title">Status de Aprovação</div>
-                <div class="table-container">{status_aprov_html_diff}</div>
-            </div>
-            <div class="section">
                 <div class="section-title">Resumo por Frente</div>
                 {comentario_html_frente}
                 <div class="table-container">{resumo_frente_html}</div>
@@ -686,6 +735,7 @@ if uploaded_file and uploaded_file_itens:
             </div>
             <div class="footer">
                 Relatório gerado automaticamente em {data_atual}.<br/>
+                {'<b>Data e horário de corte:</b> ' + data_corte + '<br/>' if data_corte else ''}
                 <span style="color:#022928;font-weight:bold;">SIPAL +DIGITAL</span>
             </div>
         </div>
