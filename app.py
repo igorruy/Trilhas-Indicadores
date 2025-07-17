@@ -29,8 +29,6 @@ from pyppeteer import launch
 
 st.set_page_config(page_title='Status da Construção das Trilhas', layout='wide')
 
-st.title('STATUS DA CONSTRUÇÃO DAS TRILHAS')
-
 # Campos de comentário e tipo SEMPRE visíveis
 col_coment, col_tipo, col_corte = st.columns([3,1,2])
 with col_coment:
@@ -208,6 +206,24 @@ if uploaded_file and uploaded_file_itens:
                 perc = (diff / total_aprovadas_ant * 100) if total_aprovadas_ant else 0
                 diff_var = total_aprovadas_var_dim - total_aprovadas_var_dim_ant
                 perc_var = (diff_var / total_aprovadas_var_dim_ant * 100) if total_aprovadas_var_dim_ant else 0
+    # --- TEMA VISUAL STREAMLIT ---
+    # CSS customizado para Streamlit
+    # st.markdown(
+    #     '''<style>
+    #     .main {background-color: #f6f8fa;}
+    #     .block-container {padding-top: 1.5rem;}
+    #     .stApp {background-color: #f6f8fa;}
+    #     .stTextInput>div>div>input, .stTextArea>div>textarea {background: #fff !important; border-radius: 8px; border: 1.5px solid #e0e7ef;}
+    #     .stSelectbox>div>div>div>div {background: #fff !important; border-radius: 8px; border: 1.5px solid #e0e7ef;}
+    #     .stDataFrame {background: #fff !important; border-radius: 10px; box-shadow: 0 1px 4px #0001;}
+    #     .stButton>button {background: #0074C1; color: #fff; border-radius: 8px; border: none; font-weight: 600;}
+    #     .stButton>button:hover {background: #005fa3;}
+    #     .stDownloadButton>button {background: #22B573; color: #fff; border-radius: 8px; border: none; font-weight: 600;}
+    #     .stDownloadButton>button:hover {background: #1a8e4a;}
+    #     .stAlert {border-radius: 8px;}
+    #     .stSubheader {color: #022928; font-weight: 700;}
+    #     .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {color: #022928;}
+    #     </style>''', unsafe_allow_html=True)
     # --- CARDS/KPIs NO TOPO (VISUAL STREAMLIT) ---
     st.markdown('---')
     st.subheader('Indicadores Gerais')
@@ -221,6 +237,9 @@ if uploaded_file and uploaded_file_itens:
         percentual_aprov_geral = 0
     col_kpi4.metric('% Aprovação Geral', f'{percentual_aprov_geral:.1f}%')
     col_kpi5.metric('Restam dias para o prazo', dias_restantes, help='Prazo final: 18/07/2025')
+    st.markdown('---')
+    # Manter os títulos das seções com st.subheader como antes
+    # ... existing code ...
 
     # --- CARDS/KPIs NO TOPO ---
     if ciclo:
@@ -608,24 +627,37 @@ if uploaded_file and uploaded_file_itens:
     if diff_var < 0:
         bg_card_var_dim = "#ffeaea"
     indicadores_gerais_html = f'''
-    <div class="section" style="margin-top:0;margin-bottom:24px;">
-        <div class="section-title" style="font-size:1.25em;margin-bottom:16px;">Comparativo com ciclo anterior</div>
-        <div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;">
-            <div style="flex:1 1 260px;min-width:220px;max-width:320px;background:{bg_card_trilhas};border:1.5px solid #e5e7eb;border-radius:12px;padding:18px 12px;text-align:center;">
-                <div style="font-size:1.1em;color:#022928;font-weight:600;">Trilhas Aprovadas</div>
-                <div style="font-size:2em;font-weight:bold;color:#488432;">{total_aprovadas}</div>
-                <div style="font-size:1em;color:#64748b;">{ciclo}</div>
-                <div style="margin-top:8px;font-size:1em;color:{'#488432' if diff>=0 else '#c10000'};">{diff:+d} ({perc:.1f}%){' vs ' + ciclo_anterior if ciclo_anterior else ''}</div>
-            </div>
-            <div style="flex:1 1 260px;min-width:220px;max-width:320px;background:{bg_card_var_dim};border:1.5px solid #e5e7eb;border-radius:12px;padding:18px 12px;text-align:center;">
-                <div style="font-size:1.1em;color:#022928;font-weight:600;">Trilhas Aprovadas c/ Variações e Dimensões</div>
-                <div style="font-size:2em;font-weight:bold;color:#3cb5c7;">{total_aprovadas_var_dim}</div>
-                <div style="font-size:1em;color:#64748b;">{ciclo}</div>
-                <div style="margin-top:8px;font-size:1em;color:{'#488432' if diff_var>=0 else '#c10000'};">{diff_var:+d} ({perc_var:.1f}%){' vs ' + ciclo_anterior if ciclo_anterior else ''}</div>
-            </div>
-        </div>
-    </div>
-    '''
+<table width='100%' cellpadding='0' cellspacing='0' border='0'>
+  <tr>
+    <td align='center'>
+      <table cellpadding='0' cellspacing='0' border='0' width='400' style='background:{bg_card_trilhas}; border:2px solid {('#c10000' if diff < 0 else '#488432')}; border-radius:12px; margin-bottom:16px;'>
+        <tr>
+          <td align='center' style='padding:18px 10px 10px 10px;'>
+            <div style='font-size:1.2em; font-weight:bold; color:#022928; margin-bottom:4px;'>Trilhas Aprovadas</div>
+            <div style='font-size:2em; font-weight:bold; color:#488432; margin-bottom:2px;'>{total_aprovadas}</div>
+            <div style='font-size:1em; color:#022928; margin-bottom:6px;'>{ciclo}</div>
+            <div style='font-size:1em; color:{('#c10000' if diff < 0 else '#488432')}; font-weight:bold;'>{diff:+d} ({perc:.1f}%) <span style='color:#022928;'>vs {ciclo_anterior}</span></div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td align='center'>
+      <table cellpadding='0' cellspacing='0' border='0' width='400' style='background:{bg_card_var_dim}; border:2px solid {('#c10000' if diff_var < 0 else '#3cb5c7')}; border-radius:12px;'>
+        <tr>
+          <td align='center' style='padding:18px 10px 10px 10px;'>
+            <div style='font-size:1.2em; font-weight:bold; color:#022928; margin-bottom:4px;'>Trilhas Aprovadas c/ Variações e Dimensões</div>
+            <div style='font-size:2em; font-weight:bold; color:#3cb5c7; margin-bottom:2px;'>{total_aprovadas_var_dim}</div>
+            <div style='font-size:1em; color:#022928; margin-bottom:6px;'>{ciclo}</div>
+            <div style='font-size:1em; color:{('#c10000' if diff_var < 0 else '#3cb5c7')}; font-weight:bold;'>{diff_var:+d} ({perc_var:.1f}%) <span style='color:#022928;'>vs {ciclo_anterior}</span></div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+'''
     # Garantir data de geração do relatório
     data_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
     # Gerar bloco de comentário para HTML
@@ -639,137 +671,348 @@ if uploaded_file and uploaded_file_itens:
     comentario_html_frente = gerar_comentario_html(comentario_frente, tipo_comentario_frente)
     comentario_html_aprov = gerar_comentario_html(comentario_aprov, tipo_comentario_aprov)
     comentario_html_passos = gerar_comentario_html(comentario_passos, tipo_comentario_passos)
-    # Ao montar o HTML, insira comentario_html no início de cada seção relevante:
-    html_content = f'''
-    <!DOCTYPE html>
-    <html lang="pt-br">
-    <head>
-        <meta charset="utf-8">
-        <title>Status da Construção das Trilhas - Ciclo 3</title>
-        <style>
-            body {{ margin: 0 !important; background: #fff !important; font-family: Arial, Helvetica, sans-serif; }}
-            .container {{ margin: 0 auto !important; max-width: 900px; background: #fff; border-radius: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; padding-bottom: 32px; border-left: 2px solid #e0e7ef; border-right: 2px solid #e0e7ef; border-top: none; border-bottom: none; min-height: 3000px !important; }}
-            .header {{ background: #022928; color: #fff; padding: 32px 32px 16px 32px; text-align: center; }}
-            .header-title {{ font-size: 2.3em; font-weight: 700; margin-bottom: 8px; }}
-            .header-logo {{ max-width: 110px; max-height: 80px; display: block; margin: 0 auto 12px auto; }}
-            .kpi-grid-wrapper {{ width: 100%; display: flex; justify-content: center; }}
-            .kpi-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 32px 0 24px 0; width: 100%; }}
-            .kpi-card {{ text-align: center; padding: 18px 8px 12px 8px; border-radius: 10px; border: 1px solid #f0f0f0; background: #f9fafb; }}
-            .kpi-total {{ background: #f9fafb; color: #374151; border-color: #e5e7eb; }}
-            .kpi-aprov {{ background: #ecfdf5; color: #22B573; border-color: #bbf7d0; }}
-            .kpi-exec {{ background: #f0f9ff; color: #3cb5c7; border-color: #bae6fd; }}
-            .kpi-bloq {{ background: #fef2f2; color: #c10000; border-color: #fecaca; }}
-            .kpi-pend {{ background: #f9fafb; color: #64748b; border-color: #e5e7eb; }}
-            .kpi-perc {{ background: #f0fdf4; color: #488432; border-color: #bbf7d0; }}
-            .kpi-dias {{ background: #f0f9ff; color: #022928; border-color: #bae6fd; }}
-            .kpi-value {{ font-size: 1.7em; font-weight: bold; margin-bottom: 2px; }}
-            .kpi-label {{ font-size: 0.95em; color: inherit; font-weight: 500; }}
-            .section {{ margin: 0 24px 36px 24px; background: #fff; border-radius: 12px; padding: 32px 24px 24px 24px; box-shadow: 0 2px 8px #0001; }}
-            .section-title {{ color: #022928; font-size: 1.6em; font-weight: 700; margin-bottom: 18px; }}
-            .table-container {{ background: #fff; border-radius: 10px; box-shadow: 0 1px 4px #0001; padding: 18px 8px 8px 8px; margin-bottom: 24px; overflow-x: auto; }}
-            .img-container {{ text-align: center; margin: 32px 0 0 0; }}
-            .img-container img {{ max-width: 100%; border-radius: 10px; box-shadow: 0 2px 8px #0001; }}
-            .footer {{ background: #f1f5f9; padding: 20px 30px; text-align: center; color: #64748b; font-size: 0.95em; border-top: 1px solid #e2e8f0; }}
-            .table-container table {{ width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border-radius: 12px; overflow: hidden; font-size: 1em; margin: 0; box-shadow: 0 1px 4px #0001; }}
-            .table-container th {{ background: #022928; color: #fff; padding: 12px 8px; text-align: center; font-weight: 700; border-bottom: 2px solid #e0e0e0; }}
-            .table-container td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f0f0f0; background: #fff; }}
-            .table-container tr:nth-child(even) td {{ background: #f4f8fb; }}
-            .table-container tr:hover td {{ background: #e6f7f1; }}
-            .table-container tr:last-child td,
-            .table-container tr.total-row td {{ background: #e6f7f1 !important; font-weight: bold; color: #022928; }}
-            .table-container tr:last-child td {{ border-bottom: none; }}
-            .comentario-inicial-html {{ margin: 0 24px 24px 24px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <img src="data:image/png;base64,{logo_base64}" alt="Logo SIPAL Digital" class="header-logo" />
-                <div class="header-title">STATUS DA CONSTRUÇÃO DAS TRILHAS</div>
-            </div>
-            <div class="kpi-grid-wrapper">
-              <div class="kpi-grid">
-                <div class="kpi-card kpi-total">
-                    <div class="kpi-value">{total_trilhas}</div>
-                    <div class="kpi-label">Total de Trilhas</div>
-                </div>
-                <div class="kpi-card kpi-aprov">
-                    <div class="kpi-value">{aprovadas}</div>
-                    <div class="kpi-label">Aprovadas</div>
-                </div>
-                <div class="kpi-card kpi-exec">
-                    <div class="kpi-value">{em_andamento}</div>
-                    <div class="kpi-label">Em andamento</div>
-                </div>
-                <div class="kpi-card kpi-perc">
-                    <div class="kpi-value">{percentual_aprov_geral:.1f}%</div>
-                    <div class="kpi-label">% Aprovação Geral</div>
-                </div>
-                <div class="kpi-card kpi-dias">
-                    <div class="kpi-value">{dias_restantes}</div>
-                    <div class="kpi-label">Restam dias para o prazo<br><span style='font-size:0.9em;color:#3cb5c7;'>(18/07/2025)</span></div>
-                </div>
+    # --- Exportação HTML compatível com Outlook ---
+    def df_to_html_inline(df):
+        html = df.to_html(index=False, border=1)
+        # Remove cabeçalho ou célula vazia no início
+        html = html.replace('<th></th>', '')
+        html = html.replace('<td></td>', '')
+        html = html.replace('<tr>\n<th>', '<tr><th>')  # Remove quebras de linha após <tr>
+        # Remove linha inicial vazia se houver
+        html = html.replace('<tr>\n</tr>', '')
+        html = html.replace('<tr></tr>', '')
+        html = html.replace('<table', "<table style='border-collapse:collapse; width:100%;'")
+        html = html.replace('<td', "<td style='padding:8px; border:1px solid #ccc; font-size:1em; background:#fff; text-align:center;'")
+        html = html.replace('<th', "<th style='padding:8px; border:1px solid #ccc; background:#022928; color:#fff; font-size:1em; text-align:center;'")
+        return html
+    # Gerar HTML das tabelas com estilos inline e sem linha inicial extra
+    resumo_frente_html_inline = df_to_html_inline(resumo_frente) if 'resumo_frente' in locals() and resumo_frente is not None else ''
+    resumo_aprovador_html_inline = df_to_html_inline(resumo_aprovador) if 'resumo_aprovador' in locals() and resumo_aprovador is not None else ''
+    passos_equipes_html_inline = df_to_html_inline(passos_equipes) if 'passos_equipes' in locals() and passos_equipes is not None else ''
+    # --- Cards comparativos lado a lado ---
+    indicadores_gerais_html = f"""
+<table width='100%' cellpadding='0' cellspacing='0' border='0'>
+  <tr>
+    <td align='center'>
+      <table cellpadding='0' cellspacing='0' border='0' width='820' style='margin-bottom:16px;'>
+        <tr>
+          <td align='center' width='400'>
+            <table cellpadding='0' cellspacing='0' border='0' width='100%' style='background:{bg_card_trilhas}; border:2px solid {('#c10000' if diff < 0 else '#488432')}; border-radius:12px;'>
+              <tr>
+                <td align='center' style='padding:18px 10px 10px 10px; min-height:160px; height:160px;'>
+                  <div style='font-size:1.2em; font-weight:bold; color:#022928; margin-bottom:4px;'>Trilhas Aprovadas</div>
+                  <div style='font-size:2em; font-weight:bold; color:#488432; margin-bottom:2px;'>{total_aprovadas}</div>
+                  <div style='font-size:1em; color:#022928; margin-bottom:6px;'>{ciclo}</div>
+                  <div style='font-size:1em; color:{('#c10000' if diff < 0 else '#488432')}; font-weight:bold;'>{diff:+d} ({perc:.1f}%) <span style='color:#022928;'>vs {ciclo_anterior}</span></div>
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td align='center' width='20'></td>
+          <td align='center' width='400'>
+            <table cellpadding='0' cellspacing='0' border='0' width='100%' style='background:{bg_card_var_dim}; border:2px solid {('#c10000' if diff_var < 0 else '#3cb5c7')}; border-radius:12px;'>
+              <tr>
+                <td align='center' style='padding:18px 10px 10px 10px; min-height:160px; height:160px;'>
+                  <div style='font-size:1.2em; font-weight:bold; color:#022928; margin-bottom:4px;'>Trilhas Aprovadas c/ Variações e Dimensões</div>
+                  <div style='font-size:2em; font-weight:bold; color:#3cb5c7; margin-bottom:2px;'>{total_aprovadas_var_dim}</div>
+                  <div style='font-size:1em; color:#022928; margin-bottom:6px;'>{ciclo}</div>
+                  <div style='font-size:1em; color:{('#c10000' if diff_var < 0 else '#3cb5c7')}; font-weight:bold;'>{diff_var:+d} ({perc_var:.1f}%) <span style='color:#022928;'>vs {ciclo_anterior}</span></div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+"""
+    # --- KPIs iniciais centralizados em uma linha ---
+    kpis_html = f"""
+<table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin-bottom:18px;'>
+  <tr>
+    <td align='center'>
+      <table cellpadding='0' cellspacing='0' border='0' width='900'>
+        <tr>
+          <td align='center' style='width:20%;'>
+            <table cellpadding='0' cellspacing='0' border='0' style='background:#f9fafb; border:1px solid #e5e7eb; width:150px;'>
+              <tr><td style='font-size:1.7em; font-weight:bold; color:#374151; padding:12px 0; text-align:center; min-height:100px; height:100px;'>{total_trilhas}</td></tr>
+              <tr><td style='font-size:1em; color:#374151; font-weight:500; padding-bottom:8px; text-align:center;'>Total de Trilhas</td></tr>
+            </table>
+          </td>
+          <td align='center' style='width:20%;'>
+            <table cellpadding='0' cellspacing='0' border='0' style='background:#ecfdf5; border:1px solid #bbf7d0; width:150px;'>
+              <tr><td style='font-size:1.7em; font-weight:bold; color:#22B573; padding:12px 0; text-align:center; min-height:100px; height:100px;'>{aprovadas}</td></tr>
+              <tr><td style='font-size:1em; color:#22B573; font-weight:500; padding-bottom:8px; text-align:center;'>Aprovadas</td></tr>
+            </table>
+          </td>
+          <td align='center' style='width:20%;'>
+            <table cellpadding='0' cellspacing='0' border='0' style='background:#f0f9ff; border:1px solid #bae6fd; width:150px;'>
+              <tr><td style='font-size:1.7em; font-weight:bold; color:#3cb5c7; padding:12px 0; text-align:center; min-height:100px; height:100px;'>{em_andamento}</td></tr>
+              <tr><td style='font-size:1em; color:#3cb5c7; font-weight:500; padding-bottom:8px; text-align:center;'>Em andamento</td></tr>
+            </table>
+          </td>
+          <td align='center' style='width:20%;'>
+            <table cellpadding='0' cellspacing='0' border='0' style='background:#f0fdf4; border:1px solid #bbf7d0; width:150px;'>
+              <tr><td style='font-size:1.7em; font-weight:bold; color:#488432; padding:12px 0; text-align:center; min-height:100px; height:100px;'>{percentual_aprov_geral:.1f}%</td></tr>
+              <tr><td style='font-size:1em; color:#488432; font-weight:500; padding-bottom:8px; text-align:center;'>% Aprovação Geral</td></tr>
+            </table>
+          </td>
+          <td align='center' style='width:20%;'>
+            <table cellpadding='0' cellspacing='0' border='0' style='background:#f0f9ff; border:1px solid #bae6fd; width:150px;'>
+              <tr><td style='font-size:1.7em; font-weight:bold; color:#022928; padding:12px 0; text-align:center; min-height:100px; height:100px;'>{dias_restantes}</td></tr>
+              <tr><td style='font-size:1em; color:#022928; font-weight:500; padding-bottom:8px; text-align:center;'>Restam dias para o prazo<br><span style='font-size:0.9em; color:#3cb5c7;'>(18/07/2025)</span></td></tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+"""
+    # Geração do HTML principal
+    html_content = f"""
+<!DOCTYPE html>
+<html lang='pt-br'>
+<head>
+  <meta charset='utf-8'>
+  <title>Status da Construção das Trilhas - Ciclo 3</title>
+</head>
+<body style='margin:0; padding:0; background:#fff; font-family: Arial, Helvetica, sans-serif;'>
+  <table width='100%' cellpadding='0' cellspacing='0' border='0' style='background:#fff;'>
+    <tr>
+      <td align='center'>
+        <table width='900' cellpadding='0' cellspacing='0' border='0' style='background:#fff; border:1px solid #e0e7ef;'>
+          <!-- Header -->
+          <tr>
+            <td align='center' style='background:#022928; color:#fff; padding:32px 16px 16px 16px;'>
+              <img src='data:image/png;base64,{logo_base64}' alt='Logo SIPAL Digital' style='max-width:110px; max-height:80px; display:block; margin:0 auto 12px auto;'>
+              <div style='font-size:2.3em; font-weight:700; margin-bottom:8px;'>STATUS DA CONSTRUÇÃO DAS TRILHAS</div>
+            </td>
+          </tr>
+          <!-- KPIs -->
+          <tr>
+            <td align='center' style='padding:24px 0 12px 0;'>
+              {kpis_html}
+            </td>
+          </tr>
+          <!-- Comentário inicial -->
+          {f"<tr><td style='padding:16px 32px;'>{comentario_html}</td></tr>" if comentario_html else ""}
+          <!-- Indicadores Gerais -->
+          <tr>
+            <td style='padding:16px 32px;'>
+              {indicadores_gerais_html}
+            </td>
+          </tr>
+          <!-- Resumo por Frente -->
+          <tr>
+            <td style='padding:16px 32px;'>
+              <div style='font-size:1.3em; font-weight:700; color:#022928; margin-bottom:8px;'>Resumo por Frente</div>
+              {comentario_html_frente}
+              {resumo_frente_html_inline}
+              <div style='font-size:0.98em; color:#64748b; margin:8px 0 0 4px;'><em>* Listado apenas Frentes com trilhas criadas para o ciclo</em></div>
+              <div style='text-align:center; margin:24px 0;'>
+                <img src='data:image/png;base64,{grafico_trilhas_base64}' style='max-width:100%; height:auto;'>
               </div>
-            </div>
-            {indicadores_gerais_html}
-            <div class="comentario-inicial-html">{comentario_html if comentario_html else ''}</div>
-            <div class="section">
-                <div class="section-title">Resumo por Frente</div>
-                {comentario_html_frente}
-                <div class="table-container">{resumo_frente_html}</div>
-                <div style="font-size:0.98em;color:#64748b;margin:8px 0 0 4px;"><em>* Listado apenas Frentes com trilhas criadas para o ciclo</em></div>
-                <div class="img-container"><img src="data:image/png;base64,{grafico_trilhas_base64}" /></div>
-            </div>
-            <div class="section">
-                <div class="section-title">Resumo por Aprovador Responsável</div>
-                {comentario_html_aprov}
-                <div class="table-container">{resumo_aprovador_html}</div>
-                <div style="font-size:0.98em;color:#64748b;margin:8px 0 0 4px;"><em>* Listado apenas Donos de Processo com trilhas definidas em seu nome</em></div>
-                <div class="img-container"><img src="data:image/png;base64,{grafico_aprovador_base64}" /></div>
-            </div>
-            <div class="section">
-                <div class="section-title">Passos por Equipe</div>
-                {comentario_html_passos}
-                <div class="table-container">{passos_equipes_html}</div>
-                <div class="img-container"><img src="data:image/png;base64,{grafico_passos_equipes_base64}" /></div>
-            </div>
-            <div class="footer">
-                Relatório gerado automaticamente em {data_atual}.<br/>
-                {'<b>Data e horário de corte:</b> ' + data_corte + '<br/>' if data_corte else ''}
-                <span style="color:#022928;font-weight:bold;">SIPAL +DIGITAL</span>
-            </div>
-        </div>
-    </body>
-    </html>
-    '''
-    # Ajuste no CSS do HTML para remover margens externas e garantir altura suficiente
-    html_content = html_content.replace('body {', 'body { margin: 0 !important; background: #fff !important;')
-    html_content = html_content.replace('.container {', '.container { margin: 0 auto !important; min-height: 3000px !important;')
-    with open('relatorio_trilhas.html', 'w', encoding='utf-8') as f:
-        f.write(html_content)
-    with open('relatorio_trilhas.html', 'rb') as f:
-        col_html, col_eml = st.columns(2)
-        with col_html:
+            </td>
+          </tr>
+          <!-- Resumo por Aprovador Responsável -->
+          <tr>
+            <td style='padding:16px 32px;'>
+              <div style='font-size:1.3em; font-weight:700; color:#022928; margin-bottom:8px;'>Resumo por Aprovador Responsável</div>
+              {comentario_html_aprov}
+              {resumo_aprovador_html_inline}
+              <div style='font-size:0.98em; color:#64748b; margin:8px 0 0 4px;'><em>* Listado apenas Donos de Processo com trilhas definidas em seu nome</em></div>
+              <div style='text-align:center; margin:24px 0;'>
+                <img src='data:image/png;base64,{grafico_aprovador_base64}' style='max-width:100%; height:auto;'>
+              </div>
+            </td>
+          </tr>
+          <!-- Passos por Equipe -->
+          <tr>
+            <td style='padding:16px 32px;'>
+              <div style='font-size:1.3em; font-weight:700; color:#022928; margin-bottom:8px;'>Passos por Equipe</div>
+              {comentario_html_passos}
+              {passos_equipes_html_inline}
+              <div style='text-align:center; margin:24px 0;'>
+                <img src='data:image/png;base64,{grafico_passos_equipes_base64}' style='max-width:100%; height:auto;'>
+              </div>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td align='center' style='background:#f1f5f9; padding:20px 30px; color:#64748b; font-size:0.95em; border-top:1px solid #e2e8f0;'>
+              Relatório gerado automaticamente em {data_atual}.<br>
+              {f"<b>Data e horário de corte:</b> {data_corte}<br>" if data_corte else ""}
+              <span style='color:#022928; font-weight:bold;'>SIPAL +DIGITAL</span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+    # Adicionar selectbox para escolha do modelo de exportação
+    modelo_exportacao = st.selectbox(
+        'Escolha o modelo de exportação:',
+        ['Modelo de compatibilidade com Outlook', 'Exportação HTML apenas']
+    )
+    # Função para exportação compatível com Outlook (modelo atual)
+    def exportar_html_outlook(html_content, data_atual):
+        with open('relatorio_trilhas.html', 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        with open('relatorio_trilhas.html', 'rb') as f:
+            col_html, col_eml = st.columns(2)
+            with col_html:
+                st.download_button(
+                    label="Baixar HTML Completo",
+                    data=html_content,
+                    file_name="relatorio_trilhas.html",
+                    mime="text/html",
+                    key="download_html"
+                )
+            with col_eml:
+                msg = EmailMessage()
+                msg['Subject'] = "Status da Construção das Trilhas"
+                msg['From'] = "seu@email.com"
+                msg['To'] = "destinatario@email.com"
+                msg.set_content("Seu cliente de e-mail não suporta HTML. Veja o relatório em anexo.")
+                msg.add_alternative(html_content, subtype='html')
+                eml_bytes = msg.as_bytes()
+                st.download_button(
+                    label="Baixar E-mail (EML)",
+                    data=eml_bytes,
+                    file_name="relatorio_trilhas.eml",
+                    mime="message/rfc822",
+                    key="download_eml"
+                )
+        st.success('Relatório exportado como HTML completo!')
+
+    # Função para exportação HTML apenas (modelo antigo)
+    def exportar_html_simples(html_content, data_atual):
+        with open('relatorio_trilhas.html', 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        with open('relatorio_trilhas.html', 'rb') as f:
             st.download_button(
                 label="Baixar HTML Completo",
                 data=html_content,
                 file_name="relatorio_trilhas.html",
                 mime="text/html",
-                key="download_html"
+                key="download_html_simples"
             )
-        with col_eml:
-            msg = EmailMessage()
-            msg['Subject'] = "Status da Construção das Trilhas"
-            msg['From'] = "seu@email.com"
-            msg['To'] = "destinatario@email.com"
-            msg.set_content("Seu cliente de e-mail não suporta HTML. Veja o relatório em anexo.")
-            msg.add_alternative(html_content, subtype='html')
-            eml_bytes = msg.as_bytes()
-            st.download_button(
-                label="Baixar E-mail (EML)",
-                data=eml_bytes,
-                file_name="relatorio_trilhas.eml",
-                mime="message/rfc822",
-                key="download_eml"
-            )
-    st.success('Relatório exportado como HTML completo!')
+        st.success('Relatório exportado como HTML completo!')
+    # Substituir a exportação pelo bloco condicional:
+    if modelo_exportacao == 'Modelo de compatibilidade com Outlook':
+        exportar_html_outlook(html_content, data_atual)
+    else:
+        # --- HTML do modelo antigo ---
+        html_content_simples = f'''
+        <!DOCTYPE html>
+        <html lang="pt-br">
+        <head>
+            <meta charset="utf-8">
+            <title>Status da Construção das Trilhas - Ciclo 3</title>
+            <style>
+                body {{ margin: 0 !important; background: #fff !important; font-family: Arial, Helvetica, sans-serif; }}
+                .container {{ margin: 0 auto !important; max-width: 900px; background: #fff; border-radius: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; padding-bottom: 32px; border-left: 2px solid #e0e7ef; border-right: 2px solid #e0e7ef; border-top: none; border-bottom: none; min-height: 3000px !important; }}
+                .header {{ background: #022928; color: #fff; padding: 32px 32px 16px 32px; text-align: center; }}
+                .header-title {{ font-size: 2.3em; font-weight: 700; margin-bottom: 8px; }}
+                .header-logo {{ max-width: 110px; max-height: 80px; display: block; margin: 0 auto 12px auto; }}
+                .kpi-grid-wrapper {{ width: 100%; display: flex; justify-content: center; }}
+                .kpi-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 32px 0 24px 0; width: 100%; }}
+                .kpi-card {{ text-align: center; padding: 18px 8px 12px 8px; border-radius: 10px; border: 1px solid #f0f0f0; background: #f9fafb; }}
+                .kpi-total {{ background: #f9fafb; color: #374151; border-color: #e5e7eb; }}
+                .kpi-aprov {{ background: #ecfdf5; color: #22B573; border-color: #bbf7d0; }}
+                .kpi-exec {{ background: #f0f9ff; color: #3cb5c7; border-color: #bae6fd; }}
+                .kpi-bloq {{ background: #fef2f2; color: #c10000; border-color: #fecaca; }}
+                .kpi-pend {{ background: #f9fafb; color: #64748b; border-color: #e5e7eb; }}
+                .kpi-perc {{ background: #f0fdf4; color: #488432; border-color: #bbf7d0; }}
+                .kpi-dias {{ background: #f0f9ff; color: #022928; border-color: #bae6fd; }}
+                .kpi-value {{ font-size: 1.7em; font-weight: bold; margin-bottom: 2px; }}
+                .kpi-label {{ font-size: 0.95em; color: inherit; font-weight: 500; }}
+                .section {{ margin: 0 24px 36px 24px; background: #fff; border-radius: 12px; padding: 32px 24px 24px 24px; box-shadow: 0 2px 8px #0001; }}
+                .section-title {{ color: #022928; font-size: 1.6em; font-weight: 700; margin-bottom: 18px; }}
+                .table-container {{ background: #fff; border-radius: 10px; box-shadow: 0 1px 4px #0001; padding: 18px 8px 8px 8px; margin-bottom: 24px; overflow-x: auto; }}
+                .img-container {{ text-align: center; margin: 32px 0 0 0; }}
+                .img-container img {{ max-width: 100%; border-radius: 10px; box-shadow: 0 2px 8px #0001; }}
+                .footer {{ background: #f1f5f9; padding: 20px 30px; text-align: center; color: #64748b; font-size: 0.95em; border-top: 1px solid #e2e8f0; }}
+                .table-container table {{ width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border-radius: 12px; overflow: hidden; font-size: 1em; margin: 0; box-shadow: 0 1px 4px #0001; }}
+                .table-container th {{ background: #022928; color: #fff; padding: 12px 8px; text-align: center; font-weight: 700; border-bottom: 2px solid #e0e0e0; }}
+                .table-container td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f0f0f0; background: #fff; }}
+                .table-container tr:nth-child(even) td {{ background: #f4f8fb; }}
+                .table-container tr:hover td {{ background: #e6f7f1; }}
+                .table-container tr:last-child td,
+                .table-container tr.total-row td {{ background: #e6f7f1 !important; font-weight: bold; color: #022928; }}
+                .table-container tr:last-child td {{ border-bottom: none; }}
+                .comentario-inicial-html {{ margin: 0 24px 24px 24px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <img src="data:image/png;base64,{logo_base64}" alt="Logo SIPAL Digital" class="header-logo" />
+                    <div class="header-title">STATUS DA CONSTRUÇÃO DAS TRILHAS</div>
+                </div>
+                <div class="kpi-grid-wrapper">
+                  <div class="kpi-grid">
+                    <div class="kpi-card kpi-total">
+                        <div class="kpi-value">{total_trilhas}</div>
+                        <div class="kpi-label">Total de Trilhas</div>
+                    </div>
+                    <div class="kpi-card kpi-aprov">
+                        <div class="kpi-value">{aprovadas}</div>
+                        <div class="kpi-label">Aprovadas</div>
+                    </div>
+                    <div class="kpi-card kpi-exec">
+                        <div class="kpi-value">{em_andamento}</div>
+                        <div class="kpi-label">Em andamento</div>
+                    </div>
+                    <div class="kpi-card kpi-perc">
+                        <div class="kpi-value">{percentual_aprov_geral:.1f}%</div>
+                        <div class="kpi-label">% Aprovação Geral</div>
+                    </div>
+                    <div class="kpi-card kpi-dias">
+                        <div class="kpi-value">{dias_restantes}</div>
+                        <div class="kpi-label">Restam dias para o prazo<br><span style='font-size:0.9em;color:#3cb5c7;'>(18/07/2025)</span></div>
+                    </div>
+                  </div>
+                </div>
+                {indicadores_gerais_html}
+                <div class="comentario-inicial-html">{comentario_html if comentario_html else ''}</div>
+                <div class="section">
+                    <div class="section-title">Status de Aprovação</div>
+                    <div class="table-container">{status_aprov_html_diff}</div>
+                </div>
+                <div class="section">
+                    <div class="section-title">Resumo por Frente</div>
+                    {comentario_html_frente}
+                    <div class="table-container">{resumo_frente_html}</div>
+                    <div style="font-size:0.98em;color:#64748b;margin:8px 0 0 4px;"><em>* Listado apenas Frentes com trilhas criadas para o ciclo</em></div>
+                    <div class="img-container"><img src="data:image/png;base64,{grafico_trilhas_base64}" /></div>
+                </div>
+                <div class="section">
+                    <div class="section-title">Resumo por Aprovador Responsável</div>
+                    {comentario_html_aprov}
+                    <div class="table-container">{resumo_aprovador_html}</div>
+                    <div style="font-size:0.98em;color:#64748b;margin:8px 0 0 4px;"><em>* Listado apenas Donos de Processo com trilhas definidas em seu nome</em></div>
+                    <div class="img-container"><img src="data:image/png;base64,{grafico_aprovador_base64}" /></div>
+                </div>
+                <div class="section">
+                    <div class="section-title">Passos por Equipe</div>
+                    {comentario_html_passos}
+                    <div class="table-container">{passos_equipes_html}</div>
+                    <div class="img-container"><img src="data:image/png;base64,{grafico_passos_equipes_base64}" /></div>
+                </div>
+                <div class="footer">
+                    Relatório gerado automaticamente em {data_atual}.<br/>
+                    <span style="color:#022928;font-weight:bold;">SIPAL +DIGITAL</span>
+                </div>
+            </div>
+        </body>
+        </html>
+        '''
+        html_content_simples = html_content_simples.replace('body {', 'body { margin: 0 !important; background: #fff !important;')
+        html_content_simples = html_content_simples.replace('.container {', '.container { margin: 0 auto !important; min-height: 3000px !important;')
+        exportar_html_simples(html_content_simples, data_atual)
